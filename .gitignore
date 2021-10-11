@@ -102,3 +102,8 @@ venv.bak/
 
 trained_models/
 .fuse_hidden*
+
+# Tensorboard and W&B logs
+runs/
+wandb/
+video/

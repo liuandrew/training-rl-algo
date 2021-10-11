@@ -2,6 +2,8 @@ import argparse
 
 import torch
 
+import os
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
@@ -149,6 +151,19 @@ def get_args():
         action='store_true',
         default=False,
         help='use a linear schedule on the learning rate')
+
+    #Andy: add wandb integration and video capturing flags
+    parser.add_argument('--exp-name', type=str, default=None,
+        help='the name of this experiment')
+    parser.add_argument('--track', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='if toggled, this experiment will be tracked with Weights and Biases')
+    parser.add_argument('--wandb-project-name', type=str, default="cleanRL",
+        help="the wandb's project name")
+    parser.add_argument('--wandb-entity', type=str, default=None,
+        help="the entity (team) of wandb's project")
+    parser.add_argument('--capture-video', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='weather to capture videos of the agent performances (check out `videos` folder)')
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

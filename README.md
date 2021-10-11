@@ -1,5 +1,19 @@
 # pytorch-a2c-ppo-acktr
 
+## Fork
+
+This is Andrew Liu's fork of pytorch-a2c-ppo-acktr-gail
+
+Here I will be making some slight adjustments to code to make it nicer to track experiments with
+
+### Changes from Original
+
+In each of the files, you can search "Andy:" for places where the original code was changed.
+
+* main.py: add Tensorboard and log every update
+* a2c_ppo/arguments.py: add flags for tracking and video capture. 
+* a2c_ppo/algo/ppo.py: add calculations for approx kl divergence and clipfracs
+* a2c_ppo/envs.py: add video capture wrapper to environments
 ## Update (April 12th, 2021)
 
 PPO is great, but [Soft Actor Critic](https://arxiv.org/abs/1812.05905) can be better for many continuous control tasks. Please check out [my new RL](http://github.com/ikostrikov/jax-rl) repository in jax.

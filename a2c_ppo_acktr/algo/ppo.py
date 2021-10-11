@@ -40,6 +40,8 @@ class PPO():
         action_loss_epoch = 0
         dist_entropy_epoch = 0
 
+        clipfracs = []
+        explained_vars = []
         for e in range(self.ppo_epoch):
             if self.actor_critic.is_recurrent:
                 data_generator = rollouts.recurrent_generator(
@@ -58,12 +60,20 @@ class PPO():
                     obs_batch, recurrent_hidden_states_batch, masks_batch,
                     actions_batch)
 
-                ratio = torch.exp(action_log_probs -
-                                  old_action_log_probs_batch)
+                logratio = action_log_probs - old_action_log_probs_batch 
+                ratio = torch.exp(logratio)
                 surr1 = ratio * adv_targ
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param,
                                     1.0 + self.clip_param) * adv_targ
                 action_loss = -torch.min(surr1, surr2).mean()
+
+                #Andy: compute approx kl
+                with torch.no_grad():
+                    # old_approx_kl = (-logratio).mean()
+                    approx_kl = ((ratio - 1) - logratio).mean()
+                    clipfracs += [
+                        ((ratio - 1.0).abs() > self.clip_param).float().mean().item()
+                    ]
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -75,7 +85,7 @@ class PPO():
                                                  value_losses_clipped).mean()
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
-
+                
                 self.optimizer.zero_grad()
                 (value_loss * self.value_loss_coef + action_loss -
                  dist_entropy * self.entropy_coef).backward()
@@ -93,4 +103,7 @@ class PPO():
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+
+
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, \
+            approx_kl, clipfracs

@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.algo import gail
@@ -22,6 +23,35 @@ from evaluation import evaluate
 
 def main():
     args = get_args()
+
+    #Andy: setup W&B and tensorboard
+    if args.exp_name is not None:
+        run_name = f"{args.env_name}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    else:
+        run_name = f"{args.env_name}__{args.seed}__{int(time.time())}"
+
+    if args.track:
+        import wandb
+
+        wandb.init(
+            project=args.wandb_project_name,
+            entity=args.wandb_entity,
+            sync_tensorboard=True,
+            config=vars(args),
+            name=run_name,
+            monitor_gym=True,
+            save_code=True,
+        )
+        logdir = wandb.run.dir
+        writer = SummaryWriter(logdir)
+    else:
+        writer = SummaryWriter(f"runs/{run_name}")
+
+    logged_videos = []
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+    )
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -39,7 +69,7 @@ def main():
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, device, False)
+                         args.gamma, args.log_dir, device, False, capture_video=args.capture_video)
 
     actor_critic = Policy(
         envs.observation_space.shape,
@@ -100,6 +130,8 @@ def main():
     episode_rewards = deque(maxlen=10)
 
     start = time.time()
+    #Andy: add global step
+    global_step = 0
     num_updates = int(
         args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(num_updates):
@@ -111,6 +143,8 @@ def main():
                 agent.optimizer.lr if args.algo == "acktr" else args.lr)
 
         for step in range(args.num_steps):
+            #Andy: add global step
+            global_step += 1 * args.num_processes
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
@@ -123,6 +157,14 @@ def main():
             for info in infos:
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
+                    print(f'global_step={global_step}')
+                    # Andy: add tensorboard writing episode returns
+                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], 
+                        global_step)
+                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], 
+                        global_step)
+
+
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor(
@@ -157,9 +199,35 @@ def main():
         rollouts.compute_returns(next_value, args.use_gae, args.gamma,
                                  args.gae_lambda, args.use_proper_time_limits)
 
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
+        if args.algo == 'ppo':
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs = \
+            agent.update(rollouts)
+
+        else:
+            value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
         rollouts.after_update()
+
+        #Andy: add tensorboard data tracking
+        writer.add_scalar("charts/learning_rate", agent.optimizer.param_groups[0]["lr"], global_step)
+        writer.add_scalar("losses/value_loss", value_loss, global_step)
+        writer.add_scalar("losses/policy_loss", action_loss, global_step)
+        writer.add_scalar("losses/entropy", dist_entropy, global_step)
+
+        if args.algo == 'ppo':
+            writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+            writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+        # writer.add_scalar("losses/explained_variance", explained_var, global_step)
+        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start)), global_step)
+
+        #Attempt to manually log any videos to W&B if they exist
+        if args.track and args.capture_video and 'video' in os.listdir():
+            for file in os.listdir('video'):
+                if '.mp4' in file and file not in logged_videos:
+                    if os.path.getsize('./video/' + file) > 1000:
+                        logged_videos.append(file)
+                        wandb.log({'video': wandb.Video('./video/' +  file),
+                            'format': 'gif'})
 
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0
@@ -187,11 +255,23 @@ def main():
                         np.max(episode_rewards), dist_entropy, value_loss,
                         action_loss))
 
+
+
         if (args.eval_interval is not None and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):
             obs_rms = utils.get_vec_normalize(envs).obs_rms
             evaluate(actor_critic, obs_rms, args.env_name, args.seed,
                      args.num_processes, eval_log_dir, device)
+
+    #Finally log all remaining videos
+    if args.track and args.capture_video and 'video' in os.listdir():
+        time.sleep(5)
+        for file in os.listdir('video'):
+            if '.mp4' in file and file not in logged_videos:
+                if os.path.getsize('./video/' + file) > 1000:
+                    logged_videos.append(file)
+                    wandb.log({'video': wandb.Video('./video/' +  file),
+                        'format': 'gif'})
 
 
 if __name__ == "__main__":
