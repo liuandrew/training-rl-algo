@@ -14,6 +14,8 @@ In each of the files, you can search "Andy:" for places where the original code 
 * a2c_ppo/arguments.py: add flags for tracking and video capture. 
 * a2c_ppo/algo/ppo.py: add calculations for approx kl divergence and clipfracs
 * a2c_ppo/envs.py: add video capture wrapper to environments
+
+* evaluate.py: adding code to return all seen obs and actions during evaluation, as well as hidden states so that we could potentitally map out hidden state trajectories
 ## Update (April 12th, 2021)
 
 PPO is great, but [Soft Actor Critic](https://arxiv.org/abs/1812.05905) can be better for many continuous control tasks. Please check out [my new RL](http://github.com/ikostrikov/jax-rl) repository in jax.
