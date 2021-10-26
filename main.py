@@ -20,6 +20,8 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 
+from scheduler import write_latest_exp_complete
+
 
 def main():
     args = get_args()
@@ -64,6 +66,25 @@ def main():
     eval_log_dir = log_dir + "_eval"
     utils.cleanup_log_dir(log_dir)
     utils.cleanup_log_dir(eval_log_dir)
+
+    # Andy: generate save path ahead of time
+    if args.save_subdir is not None:
+        save_path = os.path.join(args.save_dir, args.save_subdir)
+        try:
+            os.makedirs(save_path)
+        except OSError:
+            pass
+    else:
+        save_path = os.path.join(args.save_dir, args.algo)
+        try:
+            os.makedirs(save_path)
+        except OSError:
+            pass
+
+    if args.save_name is not None:
+        save_path = os.path.join(save_path, args.save_name + '.pt')
+    else:
+        save_path = os.path.join(save_path, args.env_name)
 
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
@@ -232,16 +253,12 @@ def main():
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0
                 or j == num_updates - 1) and args.save_dir != "":
-            save_path = os.path.join(args.save_dir, args.algo)
-            try:
-                os.makedirs(save_path)
-            except OSError:
-                pass
 
+            # Andy: change save path to use more args
             torch.save([
                 actor_critic,
                 getattr(utils.get_vec_normalize(envs), 'obs_rms', None)
-            ], os.path.join(save_path, args.env_name + ".pt"))
+            ], save_path)
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
@@ -272,6 +289,10 @@ def main():
                     logged_videos.append(file)
                     wandb.log({'video': wandb.Video('./video/' +  file),
                         'format': 'gif'})
+
+    if args.config_file_name is not None:
+        write_latest_exp_complete(args.config_file_name)
+        print('Experiment completed, experiment log updated')
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import torch
 
 import os
 
+import pickle
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
@@ -130,7 +131,7 @@ def get_args():
     parser.add_argument(
         '--save-dir',
         default='./trained_models/',
-        help='directory to save agent logs (default: ./trained_models/)')
+        help='directory to save trained models (default: ./trained_models/)')
     parser.add_argument(
         '--no-cuda',
         action='store_true',
@@ -163,6 +164,16 @@ def get_args():
         help="the entity (team) of wandb's project")
     parser.add_argument('--capture-video', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='weather to capture videos of the agent performances (check out `videos` folder)')
+
+    #Andy: add optional save name and args for envs
+    parser.add_argument('--save-name', type=str, default=None,
+        help='the name that will be saved for this experiment (default to env name)')
+    parser.add_argument('--save-subdir', type=str, default=None,
+        help='the subdirectory trained models saved in (default to algo name)')
+
+    parser.add_argument('--config-file-name', type=str, default=None,
+        help='this is used specifically for automatic scheduler to determine ' + \
+        'what experiment to write as being done once successfully completed')
 
     args = parser.parse_args()
 
