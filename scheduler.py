@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 import shutil
 
+import argparse
+
 
 CONFIG_FOLDER = 'experiment_configs/'
 '''
@@ -14,13 +16,16 @@ If running this file directly from command line, will iterate through experiment
     config files and run the experiments
 '''
 
-def convert_config_to_command(file):
+def convert_config_to_command(file, python3=False):
     '''
     when passed a file name in experiment_configs, load the config and turn it into
     a command line line to run the experiment
     '''
     config = pickle.load(open(CONFIG_FOLDER + file, 'rb'))
-    run_string = 'python main.py '
+    if python3:
+        run_string = 'python3 main.py '
+    else:
+        run_string = 'python main.py '
     for key in config:
         if config[key] is True:
             run_string = run_string + '--' + key.replace('_', '-') + ' '
@@ -90,7 +95,7 @@ def write_latest_exp_complete(file):
 
 
 
-def run_experiment(file):
+def run_experiment(file, python3=False):
     '''
     Pass a config file to run an experiment
     Save the experiment to experiment log
@@ -99,7 +104,7 @@ def run_experiment(file):
     Otherwise delete the row that was added
     '''
     add_exp_row(file)
-    run_string = convert_config_to_command(file)
+    run_string = convert_config_to_command(file, python3)
     os.system(run_string)
 
     exp_log = load_exp_log()
@@ -118,9 +123,14 @@ if __name__ == "__main__":
     '''
     If running scheduler, go through experiment_configs folder and run each of the configs
     '''
+    parser = argparse.ArgumentParser(description='RL')
+    parser.add_argument('--python3', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='flag for whether command line should use python3 or python')
+    args = parser.parse_args()
+    print(args.python3)
     files = os.listdir(CONFIG_FOLDER)
     for file in files:
         if file not in ['.ipynb_checkpoints', 'archive']:
             print('running experiment: ', file)
-            run_experiment(file)
+            run_experiment(file, python3=args.python3)
             print('experiment complete')
