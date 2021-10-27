@@ -5,6 +5,7 @@ import time
 from collections import deque
 
 import gym
+import gym_nav
 import numpy as np
 import torch
 import torch.nn as nn
