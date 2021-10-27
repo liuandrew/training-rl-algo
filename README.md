@@ -11,6 +11,7 @@ Here I will be making some slight adjustments to code to make it nicer to track 
 In each of the files, you can search "Andy:" for places where the original code was changed.
 
 * main.py: add Tensorboard and log every update
+  * change
 * a2c_ppo/arguments.py: add flags for tracking and video capture. 
 * a2c_ppo/algo/ppo.py: add calculations for approx kl divergence and clipfracs
 * a2c_ppo/envs.py: add video capture wrapper to environments

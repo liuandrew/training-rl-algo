@@ -106,3 +106,4 @@ wandb/
 video/
 logs/
 experiment_configs/
+experiment_configs/*

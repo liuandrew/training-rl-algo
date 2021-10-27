@@ -4,12 +4,22 @@ from datetime import datetime
 import os
 import shutil
 
+
+CONFIG_FOLDER = 'experiment_configs/'
+'''
+File for running training experients from experiment_configs folder
+Also has functions for handling storing and reading experiment config files
+    and experiment log
+If running this file directly from command line, will iterate through experiment
+    config files and run the experiments
+'''
+
 def convert_config_to_command(file):
     '''
     when passed a file name in experiment_configs, load the config and turn it into
     a command line line to run the experiment
     '''
-    config = pickle.load(open('experiment_configs/' + file, 'rb'))
+    config = pickle.load(open(CONFIG_FOLDER + file, 'rb'))
     run_string = 'python main.py '
     for key in config:
         if config[key] is True:
@@ -54,7 +64,7 @@ def add_exp_row(file):
     Add a config to the experiment log
     '''
     exp_log = load_exp_log()
-    config = pickle.load(open('experiment_configs/' + file, 'rb'))
+    config = pickle.load(open(CONFIG_FOLDER + file, 'rb'))
     index = len(exp_log)
     exp_log = exp_log.append(config, ignore_index=True)
     exp_log.loc[index, 'begin'] = datetime.now()
@@ -97,8 +107,18 @@ def run_experiment(file):
     if exp_log.loc[idx, 'success']:
         #experiment completed successfully
         ext = str(int(datetime.now().timestamp()))
-        shutil.move('experiment_configs/' + file, 'experiment_configs/archive/' + file + ext)
+        shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
     else:
         exp_log.loc[idx, 'success'] = False
 
     save_exp_log(exp_log)
+
+
+if __name__ == "__main__":
+    '''
+    If running scheduler, go through experiment_configs folder and run each of the configs
+    '''
+    files = os.listdir(CONFIG_FOLDER)
+    for file in files:
+        if file not in ['.ipynb_checkpoints', 'archive']:
+            run_experiment(file)
