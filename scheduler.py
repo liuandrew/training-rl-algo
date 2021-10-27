@@ -121,4 +121,6 @@ if __name__ == "__main__":
     files = os.listdir(CONFIG_FOLDER)
     for file in files:
         if file not in ['.ipynb_checkpoints', 'archive']:
+            print('running experiment: ', file)
             run_experiment(file)
+            print('experiment complete')
