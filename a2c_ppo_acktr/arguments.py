@@ -1,10 +1,40 @@
 import argparse
 
 import torch
-
 import os
-
 import pickle
+import json
+
+
+
+#Andy: code used for passing environmental kwargs through command line
+def isfloat(str):
+    try:
+        float(str)
+        return True
+    except:
+        return False
+
+class ParseKwargs(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, dict())
+        for value in values:
+            key, value = value.split('=')
+
+            if value.isnumeric():
+                value = int(value)
+            elif value == 'True':
+                value = True
+            elif value == 'False':
+                value = False
+            elif value == 'None':
+                value = None
+            elif isfloat(value):
+                value = float(value)
+
+            getattr(namespace, self.dest)[key] = value
+
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
@@ -171,9 +201,13 @@ def get_args():
     parser.add_argument('--save-subdir', type=str, default=None,
         help='the subdirectory trained models saved in (default to algo name)')
 
+    #Andy: extra variables to allow more flexibility and scheduling
     parser.add_argument('--config-file-name', type=str, default=None,
         help='this is used specifically for automatic scheduler to determine ' + \
         'what experiment to write as being done once successfully completed')
+    # parser.add_argument('--env-kwargs', type=json.loads, default=None,
+    #     help='pass kwargs for environment given as json string')
+    parser.add_argument('--env-kwargs', nargs='*', action=ParseKwargs, default=None)
 
     args = parser.parse_args()
 
