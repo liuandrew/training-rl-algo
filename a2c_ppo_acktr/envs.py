@@ -42,7 +42,10 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets, capture_video,
             env = dmc2gym.make(domain_name=domain, task_name=task)
             env = ClipAction(env)
         else:
-            env = gym.make(env_id, **env_kwargs)
+            if env_kwargs is not None:
+                env = gym.make(env_id, **env_kwargs)
+            else:
+                env = gym.make(env_id)
 
         #Andy: add capture video wrapper
         if capture_video and rank == 0:

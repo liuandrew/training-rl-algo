@@ -526,7 +526,7 @@ def randomize_location_and_angle(character):
 
 
 class NavEnv(gym.Env):
-    metadata = {"render.modes": ['rgb_array', 'pygame'], 'video.frames_per_second': 24}
+    metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
     def __init__(self, num_rays=30, max_steps=200, num_objects=5,
                 rew_structure='dist', give_heading=0, verbose=0, flat=True,
                 world_gen_func=None, world_gen_params={}):
