@@ -638,7 +638,8 @@ class NavEnv(gym.Env):
     def render(self, mode='rgb_array'):
         if 'screen' not in globals():
             pygame.init()
-            globals()['screen'] = pygame.display.set_mode(WINDOW_SIZE)
+            if mode == 'human':
+                globals()['screen'] = pygame.display.set_mode(WINDOW_SIZE)
             globals()['display'] = pygame.Surface(WINDOW_SIZE)
 
         display.fill((0, 0, 0))
@@ -647,8 +648,9 @@ class NavEnv(gym.Env):
         for obj in objects:
             obj.draw()
 
-        screen.blit(display, (0, 0))
-        pygame.display.update()
+        if mode == 'human':
+            screen.blit(display, (0, 0))
+            pygame.display.update()
             
         if mode == 'rgb_array':
             return pygame.surfarray.pixels3d(display)
