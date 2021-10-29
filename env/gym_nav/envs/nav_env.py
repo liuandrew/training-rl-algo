@@ -6,7 +6,7 @@ import math
 MAX_MARCH = 20
 EPSILON = 0.1
 DEG_TO_RAD = 0.0174533
-WINDOW_SIZE = (300, 200) # Width x Height in pixels
+WINDOW_SIZE = (200, 300) # Width x Height in pixels
 
 def generate_box(pos=None, size=[10, 25], inside_window=True, color=(255, 255, 255), is_goal=False):
     '''

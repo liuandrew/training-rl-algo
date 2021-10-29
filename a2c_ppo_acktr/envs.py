@@ -33,8 +33,8 @@ except ImportError:
     pass
 
 
-def make_env(env_id, seed, rank, log_dir, allow_early_resets, capture_video,
-                env_kwargs):
+def make_env(env_id, seed, rank, log_dir, allow_early_resets, capture_video=False,
+                env_kwargs=None):
     def _thunk():
 
         if env_id.startswith("dm"):
@@ -48,9 +48,9 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets, capture_video,
                 env = gym.make(env_id)
 
         #Andy: add capture video wrapper
-        if capture_video and rank == 0:
+        if capture_video is not False and capture_video != 0 and rank == 0:
             env = gym.wrappers.Monitor(env, './video', 
-                video_callable=lambda t:t%5==0, force=True)
+                video_callable=lambda t:t%capture_video==0, force=True)
 
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
