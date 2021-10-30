@@ -126,10 +126,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='RL')
     parser.add_argument('--python3', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='flag for whether command line should use python3 or python')
+
+    parser.add_argument('--manual', type=str, default=None,
+        help='whether to manually run a single experiment, and what file name it is')
     args = parser.parse_args()
-    print(args.python3)
+    # print(args.python3)
+
     files = os.listdir(CONFIG_FOLDER)
+
     for file in files:
+        if args.manual is not None:
+            #check if file starts with the desired start
+            # print(type(args.manual))
+            # print(type(file))
+            # print(args.manual in file)
+            if args.manual not in file:
+                continue
         if file not in ['.ipynb_checkpoints', 'archive']:
             print('running experiment: ', file)
             run_experiment(file, python3=args.python3)

@@ -110,6 +110,18 @@ def add_walls():
     add_box(Box(np.array([WINDOW_SIZE[0], 0]), np.array([1, WINDOW_SIZE[1]]), color=(0, 255, 0)))
 
     
+
+def spaced_random_pos(sep=5):
+    '''
+    Find a spot that has a minimum separation from other objects in the scene
+    '''
+    while True:
+        pos = np.random.uniform(WINDOW_SIZE)
+        if scene_sdf(pos)[0] > sep:
+            return pos
+
+
+
 def generate_world(num_objects=5, min_goal_sep=15, color=(0, 255, 0)):
     reset_objects()
     '''generate obstacles'''
@@ -125,17 +137,9 @@ def generate_world(num_objects=5, min_goal_sep=15, color=(0, 255, 0)):
     globals()['objects'] = boxes + circles
     
     #create walls around screen:
-#     add_box(Box(np.array([0, 0]), np.array([1, WINDOW_SIZE[1]])))
-#     add_box(Box(np.array([0, 0]), np.array([WINDOW_SIZE[0], 1])))
-#     add_box(Box(np.array([0, WINDOW_SIZE[1]]), np.array([WINDOW_SIZE[0], 1])))
-#     add_box(Box(np.array([WINDOW_SIZE[0], 0]), np.array([1, WINDOW_SIZE[1]])))
-#     add_box(Box(np.array([0, 0]), np.array([1, WINDOW_SIZE[1]]), color=(0, 255, 0)))
-#     add_box(Box(np.array([0, 0]), np.array([WINDOW_SIZE[0], 1]), color=(0, 255, 0)))
-#     add_box(Box(np.array([0, WINDOW_SIZE[1]]), np.array([WINDOW_SIZE[0], 1]), color=(0, 255, 0)))
-#     add_box(Box(np.array([WINDOW_SIZE[0], 0]), np.array([1, WINDOW_SIZE[1]]), color=(0, 255, 0)))
     add_walls()
 
-    #create a goal, require it to be at least 50 units away from other things
+    #create a goal, require it to be at least 30 units away from player
     searching = True
     while searching:
         pos = np.random.uniform(WINDOW_SIZE)
@@ -144,7 +148,9 @@ def generate_world(num_objects=5, min_goal_sep=15, color=(0, 255, 0)):
             searching = False
             
 #     pos = np.array([500, 500])
-    add_box(generate_box(pos=pos, size=[15, 15], is_goal=True, color=(255, 0, 0)))
+    goal = generate_box(pos=pos, size=[15, 15], is_goal=True, color=(255, 0, 0))
+    globals()['goal'] = goal
+    add_box(goal)
 
 
     
@@ -176,7 +182,10 @@ def block_view_world(character, block_size=25, randomize_heading=0):
         angle = np.random.uniform(6.28)
         x = np.cos(angle) * base_radius
         y = np.sin(angle) * base_radius
-        add_box(Box(np.array([x + base_x, y + base_y]), np.array([base_size, base_size]), is_goal=True, color=(255, 0, 0)))
+        goal = Box(np.array([x + base_x, y + base_y]), np.array([base_size, base_size]), 
+            is_goal=True, color=(255, 0, 0))
+        globals()['goal'] = goal
+        add_box(goal)
         
         angle2 = angle + 3.14
         x = np.cos(angle2) * base_radius
@@ -192,10 +201,11 @@ def block_view_world(character, block_size=25, randomize_heading=0):
         
     else:
         #add the goal
-
-        add_box(Box(np.array([WINDOW_SIZE[0] - 50, WINDOW_SIZE[1]/2]),
+        goal = Box(np.array([WINDOW_SIZE[0] - 50, WINDOW_SIZE[1]/2]),
                    np.array([base_size, base_size]),
-                   is_goal=True, color=(255, 0, 0)))
+                   is_goal=True, color=(255, 0, 0))
+        globals()['goal'] = goal
+        add_box(goal)
 
         #set the agent position
         character.pos = np.array([50, WINDOW_SIZE[1]/2])
@@ -506,15 +516,24 @@ class Character:
         
         
         
-def randomize_location_and_angle(character):
+def randomize_location_and_angle(character, sep=True):
     '''
     create a random location and start direction for the character
     noting that we do not allow spawning into objects
+    sep: if set to True, we will make sure character has a minimum distance away
+        from the goal that is at least half the max distance possible from goal
+        to end of window
     '''
+
+    #max distance from goal to end of window
+    max_goal_sep = dist(np.max([np.array(WINDOW_SIZE) - goal.center, goal.center], axis=0)) 
+    sep = True
     searching = True
     while searching:
         pos = np.random.uniform(WINDOW_SIZE)
-        if scene_sdf(pos)[0] > 0:
+        goal_sep = dist(globals()['goal'].center - pos)
+
+        if scene_sdf(pos)[0] > 0 and (not sep or goal_sep > max_goal_sep / 2):
             #position is okay
             searching = False
             
@@ -522,6 +541,7 @@ def randomize_location_and_angle(character):
     character.angle = np.random.uniform(6.28)
 #     character.pos = np.array([100, 100])
 #     character.angle = 0
+
     character.update_rays()
 
 
@@ -561,7 +581,7 @@ class NavEnv(gym.Env):
         self.max_steps = max_steps
         self.current_steps = 0
         
-        self.character = Character()        
+        self.character = Character()
         
         self.num_objects = num_objects
         
