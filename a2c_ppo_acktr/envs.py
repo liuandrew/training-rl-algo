@@ -49,8 +49,10 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets, capture_video=Fals
 
         #Andy: add capture video wrapper
         if capture_video is not False and capture_video != 0 and rank == 0:
-            env = gym.wrappers.Monitor(env, './video', 
-                video_callable=lambda t:t%capture_video==0, force=True)
+            # env = gym.wrappers.Monitor(env, './video', 
+            #     video_callable=lambda t:t%capture_video==0, force=True)
+            env = gym.wrappers.RecordVideo(env, './video',
+                episode_trigger=lambda t:t%capture_video==0)
 
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)

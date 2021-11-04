@@ -50,6 +50,47 @@ def main():
     else:
         writer = SummaryWriter(f"runs/{run_name}")
 
+    #Setup video uploading
+    vid_dir = 'video'
+
+    for f in os.listdir(vid_dir):
+        os.remove(os.path.join(vid_dir, f))
+
+
+    # def file_available(f):
+    #     if os.path.exists(f):
+    #         try:
+    #             os.rename(f, f)
+    #             return True
+    #         except OSError as e:
+    #             return False
+
+    def available_videos():
+        vid_dir = 'video'
+        unuploaded_vids = []
+        idxs = []
+        for f in os.listdir(vid_dir):
+            if '.mp4' in f and f not in logged_videos:
+                unuploaded_vids.append(f)
+
+        if len(unuploaded_vids) > 1:
+            for f in unuploaded_vids:
+                idxs.append(int(f.split('.mp4')[0].split('-')[-1]))
+            f = unuploaded_vids[np.argmin(idxs)]
+            return os.path.join(vid_dir, f), f
+        else:
+            return False
+
+    def upload_videos():
+        available = available_videos()
+        if available is not False:
+            path = available[0]
+            f = available[1]
+            wandb.log({'video': wandb.Video(path),
+                'format': 'gif'})
+            logged_videos.append(f)
+                        
+
     logged_videos = []
     writer.add_text(
         "hyperparameters",
@@ -245,12 +286,7 @@ def main():
 
         #Attempt to manually log any videos to W&B if they exist
         if args.track and args.capture_video and 'video' in os.listdir():
-            for file in os.listdir('video'):
-                if '.mp4' in file and file not in logged_videos:
-                    if os.path.getsize('./video/' + file) > 1000:
-                        logged_videos.append(file)
-                        wandb.log({'video': wandb.Video('./video/' +  file),
-                            'format': 'gif'})
+            upload_videos()
 
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0
@@ -285,12 +321,7 @@ def main():
     #Finally log all remaining videos
     if args.track and args.capture_video and 'video' in os.listdir():
         time.sleep(5)
-        for file in os.listdir('video'):
-            if '.mp4' in file and file not in logged_videos:
-                if os.path.getsize('./video/' + file) > 1000:
-                    logged_videos.append(file)
-                    wandb.log({'video': wandb.Video('./video/' +  file),
-                        'format': 'gif'})
+        upload_videos()
 
     if args.config_file_name is not None:
         write_latest_exp_complete(args.config_file_name)
