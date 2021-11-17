@@ -339,7 +339,6 @@ def randomize_location_and_angle(character, goal=None, world_size=[300, 300], sd
 
     #max distance from goal to end of window
     max_goal_sep = dist(np.max([np.array(WINDOW_SIZE) - goal.center, goal.center], axis=0)) 
-    sep = True
     searching = True
     while searching:
         pos = np.random.uniform(WINDOW_SIZE)
@@ -746,7 +745,7 @@ class MorrisNav(GeneralNav):
     def __init__(self, num_rays=30, max_steps=None, give_heading=0, verbose=0,
                 platform_visible=False, ep_struct=1, platform_size=10, world_size=[300, 300],
                 platform_randomization=1, platform_randomization_spread=20,
-                global_cues=1, platform_fixed_duration=10):
+                global_cues=1, platform_fixed_duration=10, character_sep=False):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -775,6 +774,8 @@ class MorrisNav(GeneralNav):
         platform_fixed_time: once the agent reaches the plaform, it will not longer be allowed to 
             move forward, only rotate (mimic the "stay on platform and look around" phase). This controls
             how many timesteps this happens for
+
+        character_sep: whether character should be forced to a randomized position far from platform
         '''
         super(MorrisNav, self).__init__()
 
@@ -794,7 +795,8 @@ class MorrisNav(GeneralNav):
         self.world_size = world_size
         self.global_cues = global_cues
         self.platform_fixed_duration = platform_fixed_duration
-        
+        self.character_sep = character_sep
+
         self.num_rays = num_rays
         
         if give_heading:
@@ -957,7 +959,7 @@ class MorrisNav(GeneralNav):
         self.total_rewards = 0
         self.on_platform = False
         self.duration_on_platform = 0
-        randomize_location_and_angle(self.character, self.goal, self.world_size, self.get_sdf_func('all'))
+        randomize_location_and_angle(self.character, self.goal, self.world_size, self.get_sdf_func('all'), self.character_sep)
         return observation
     
     def reset_character(self):
@@ -966,4 +968,4 @@ class MorrisNav(GeneralNav):
         '''
         self.on_platform = False
         self.duration_on_platform = 0
-        randomize_location_and_angle(self.character, self.goal, self.world_size, self.get_sdf_func('all'))
+        randomize_location_and_angle(self.character, self.goal, self.world_size, self.get_sdf_func('all'), self.character_sep)
