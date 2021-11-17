@@ -949,7 +949,8 @@ class MorrisNav(GeneralNav):
             return obs
     
     def reset(self):
-        self.generate_world()
+        if ep_struct == 2:
+            self.generate_world()
         
         observation = self.get_observation()
         self.current_steps = 0
