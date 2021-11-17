@@ -949,7 +949,7 @@ class MorrisNav(GeneralNav):
             return obs
     
     def reset(self):
-        if ep_struct == 2:
+        if self.ep_struct == 2:
             self.generate_world()
         
         observation = self.get_observation()
