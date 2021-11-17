@@ -888,7 +888,6 @@ class MorrisNav(GeneralNav):
         #     obj = collide_with_object[1]
                     
         if self.on_platform:
-            print('tick up')
             self.duration_on_platform += 1
             reward = 1
             if self.duration_on_platform >= self.platform_fixed_duration:
