@@ -745,7 +745,8 @@ class MorrisNav(GeneralNav):
     def __init__(self, num_rays=30, max_steps=None, give_heading=0, verbose=0,
                 platform_visible=False, ep_struct=1, platform_size=10, world_size=[300, 300],
                 platform_randomization=1, platform_randomization_spread=20,
-                global_cues=1, platform_fixed_duration=10, character_sep=False):
+                global_cues=1, platform_fixed_duration=10, character_sep=False, 
+                reward_shift=0):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -776,6 +777,9 @@ class MorrisNav(GeneralNav):
             how many timesteps this happens for
 
         character_sep: whether character should be forced to a randomized position far from platform
+
+        reward_shift: value the reward should be centered on (e.g., -1 will make every time step give
+         -1 reward, vs. 0 where the goal gives 1 reward)
         '''
         super(MorrisNav, self).__init__()
 
@@ -796,6 +800,7 @@ class MorrisNav(GeneralNav):
         self.global_cues = global_cues
         self.platform_fixed_duration = platform_fixed_duration
         self.character_sep = character_sep
+        self.reward_shift = reward_shift
 
         self.num_rays = num_rays
         
@@ -905,6 +910,7 @@ class MorrisNav(GeneralNav):
         if self.current_steps > self.max_steps:
             done = True
                 
+        reward += self.reward_shift
         self.current_steps += 1
         self.total_rewards += reward
         if done and self.verbose:
