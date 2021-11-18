@@ -759,6 +759,9 @@ class MorrisNav(GeneralNav):
             2: the platform position resets each episode, and if the agent stays on a platform
                 for a while, rewards will be given and position reset 
                 (implement later)
+            3: agent must stay on platform for 5 timesteps before reward is given and
+                episode resets
+            4: agent must explicitly perform an action to say when it is on the platform (not implemented)
         !!
         plaform_randomization: how the platform position will be randomized
             1: fixed positions in one of four quadrants
@@ -813,7 +816,7 @@ class MorrisNav(GeneralNav):
         self.action_space = spaces.Discrete(4) #turn left, forward, right as actions
         
         if max_steps is None:
-            if ep_struct == 1:
+            if ep_struct == 1 or ep_struct == 3:
                 self.max_steps = 200
             if ep_struct == 2:
                 self.max_steps = 1000
@@ -882,9 +885,9 @@ class MorrisNav(GeneralNav):
         if action == 0:
             self.character.rotate(-0.1)
         if action == 1:
-            if not self.on_platform:
+            if self.ep_struct >= 3 or not self.on_platform:
                 #if on the platform, must now be fixed onto it
-                collide_with_object = self.character.move(10)
+                collide_with_object = self.character.move(3)
         if action == 2:
             self.character.rotate(0.1)
         if action == 3:
@@ -896,7 +899,8 @@ class MorrisNav(GeneralNav):
                     
         if self.on_platform:
             self.duration_on_platform += 1
-            reward = 1
+            if self.ep_struct <= 2:
+                reward = 1
             if self.duration_on_platform >= self.platform_fixed_duration:
                 if self.ep_struct == 1:
                     #resetting episode in ep_struct 1
@@ -904,6 +908,9 @@ class MorrisNav(GeneralNav):
                 elif self.ep_struct == 2:
                     #only reset position in ep_struct 2, episode concludes at end of time
                     self.reset_character()
+                elif self.ep_struct == 3:
+                    reward = 1
+                    done = True
 
         observation = self.get_observation()
         
