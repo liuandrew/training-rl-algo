@@ -136,15 +136,17 @@ def main():
                          env_kwargs=args.env_kwargs)
 
     loaded_model = False
+    print(args.cont)
     if args.cont:
         loaded_model = True
         actor_critic, obs_rms = torch.load(save_path)
-    if not loaded_model or not args.cont
-    actor_critic = Policy(
-        envs.observation_space.shape,
-        envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
-    actor_critic.to(device)
+
+    if not loaded_model or not args.cont:
+        actor_critic = Policy(
+            envs.observation_space.shape,
+            envs.action_space,
+            base_kwargs={'recurrent': args.recurrent_policy})
+        actor_critic.to(device)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -200,7 +202,11 @@ def main():
 
     start = time.time()
     #Andy: add global step
-    global_step = 0
+    if args.cont:
+        global_step = int(obs_rms.count)
+    else:
+        global_step = 0
+    print(global_step)
     num_updates = int(
         args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(num_updates):

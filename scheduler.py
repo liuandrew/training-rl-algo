@@ -41,6 +41,7 @@ def convert_config_to_command(file, python3=False, cont=False):
         run_string = run_string + '--cont '
     #additionally add file name flag
     run_string = run_string + '--config-file-name ' + file + ' '
+    # print(run_string)
     return run_string
 
 
@@ -132,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument('--manual', type=str, default=None,
         help='whether to manually run a single experiment, and what file name it is')
 
-    parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=False,
+    parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
     args = parser.parse_args()
     # print(args.python3)
@@ -149,5 +150,6 @@ if __name__ == "__main__":
                 continue
         if file not in ['.ipynb_checkpoints', 'archive']:
             print('running experiment: ', file)
+            # print(args.cont)
             run_experiment(file, python3=args.python3, cont=args.cont)
             print('experiment complete')
