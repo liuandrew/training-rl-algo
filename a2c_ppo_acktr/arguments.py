@@ -211,6 +211,9 @@ def get_args():
     #     help='pass kwargs for environment given as json string')
     parser.add_argument('--env-kwargs', nargs='*', action=ParseKwargs, default=None)
 
+    parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=False,
+        help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

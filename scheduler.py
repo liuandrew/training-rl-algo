@@ -16,7 +16,7 @@ If running this file directly from command line, will iterate through experiment
     config files and run the experiments
 '''
 
-def convert_config_to_command(file, python3=False):
+def convert_config_to_command(file, python3=False, cont=False):
     '''
     when passed a file name in experiment_configs, load the config and turn it into
     a command line line to run the experiment
@@ -37,7 +37,8 @@ def convert_config_to_command(file, python3=False):
             run_string = run_string + add_str
         else:
             run_string = run_string + '--' + key.replace('_', '-')  + ' ' + str(config[key]) + ' '
-
+    if cont:
+        run_string = run_string + '--cont '
     #additionally add file name flag
     run_string = run_string + '--config-file-name ' + file + ' '
     return run_string
@@ -95,7 +96,7 @@ def write_latest_exp_complete(file):
 
 
 
-def run_experiment(file, python3=False):
+def run_experiment(file, python3=False, cont=False):
     '''
     Pass a config file to run an experiment
     Save the experiment to experiment log
@@ -103,8 +104,9 @@ def run_experiment(file, python3=False):
         then archive the config file
     Otherwise delete the row that was added
     '''
-    add_exp_row(file)
-    run_string = convert_config_to_command(file, python3)
+    if cont is False:
+        add_exp_row(file)
+    run_string = convert_config_to_command(file, python3, cont)
     os.system(run_string)
 
     exp_log = load_exp_log()
@@ -129,6 +131,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--manual', type=str, default=None,
         help='whether to manually run a single experiment, and what file name it is')
+
+    parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=False,
+        help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
     args = parser.parse_args()
     # print(args.python3)
 
@@ -144,5 +149,5 @@ if __name__ == "__main__":
                 continue
         if file not in ['.ipynb_checkpoints', 'archive']:
             print('running experiment: ', file)
-            run_experiment(file, python3=args.python3)
+            run_experiment(file, python3=args.python3, cont=args.cont)
             print('experiment complete')

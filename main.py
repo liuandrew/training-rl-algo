@@ -135,6 +135,11 @@ def main():
                          args.gamma, args.log_dir, device, False, capture_video=args.capture_video,
                          env_kwargs=args.env_kwargs)
 
+    loaded_model = False
+    if args.cont:
+        loaded_model = True
+        actor_critic, obs_rms = torch.load(save_path)
+    if not loaded_model or not args.cont
     actor_critic = Policy(
         envs.observation_space.shape,
         envs.action_space,
