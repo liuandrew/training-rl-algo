@@ -746,7 +746,7 @@ class MorrisNav(GeneralNav):
                 platform_visible=False, ep_struct=1, platform_size=10, world_size=[300, 300],
                 platform_randomization=1, platform_randomization_spread=20,
                 global_cues=1, platform_fixed_duration=10, character_sep=False, 
-                reward_shift=0):
+                reward_shift=0, platform_reward=100):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -804,6 +804,7 @@ class MorrisNav(GeneralNav):
         self.platform_fixed_duration = platform_fixed_duration
         self.character_sep = character_sep
         self.reward_shift = reward_shift
+        self.platform_reward = platform_reward
 
         self.num_rays = num_rays
         
@@ -900,7 +901,7 @@ class MorrisNav(GeneralNav):
         if self.on_platform:
             self.duration_on_platform += 1
             if self.ep_struct <= 2:
-                reward = 1
+                reward = self.platform_reward
             if self.duration_on_platform >= self.platform_fixed_duration:
                 if self.ep_struct == 1:
                     #resetting episode in ep_struct 1
@@ -909,7 +910,7 @@ class MorrisNav(GeneralNav):
                     #only reset position in ep_struct 2, episode concludes at end of time
                     self.reset_character()
                 elif self.ep_struct == 3:
-                    reward = 1
+                    reward = self.platform_reward
                     done = True
 
         observation = self.get_observation()
