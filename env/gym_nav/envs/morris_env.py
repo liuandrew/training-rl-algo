@@ -746,7 +746,7 @@ class MorrisNav(GeneralNav):
                 platform_visible=False, ep_struct=1, platform_size=10, world_size=[300, 300],
                 platform_randomization=1, platform_randomization_spread=20,
                 global_cues=1, platform_fixed_duration=10, character_sep=False, 
-                reward_shift=0, platform_reward=100):
+                reward_shift=0, platform_reward=100, max_steps=None):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -823,6 +823,10 @@ class MorrisNav(GeneralNav):
                 self.max_steps = 1000
         else:
             self.max_steps = max_steps
+
+        if max_steps is not None:
+            self.max_steps = max_steps
+            
         self.current_steps = 0
         self.duration_on_platform = 0
         self.on_platform = False
