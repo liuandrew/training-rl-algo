@@ -8,3 +8,7 @@ register(
     id='MorrisEnv-v0',
     entry_point='gym_nav.envs:MorrisNav'
 )
+register(
+    id='Gridworld-v0',
+    entry_point='gym_nav.envs:GridworldNav'
+)
