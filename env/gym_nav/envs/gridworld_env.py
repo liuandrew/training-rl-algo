@@ -1,6 +1,7 @@
 import numpy as np
 import gym
 import matplotlib.pyplot as plt
+from gym import spaces
 
 class GridworldNav(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
