@@ -6,7 +6,7 @@ from gym import spaces
 class GridworldNav(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
     def __init__(self, view_width=2, max_steps=200, give_direction=0, world_gen_func={}, 
-                world_size=[20, 20], give_dist=False, num_obstacles=10, goal_size=1,
+                world_size=20, give_dist=False, num_obstacles=10, goal_size=1,
                 skeleton=True, goal_reward=10):
         '''
         General gridworld with 2d rays of vision. Agent gets to rotate or move forward
@@ -56,7 +56,7 @@ class GridworldNav(gym.Env):
         #convention of world:
         # first index is y position (down is +1, up is -1)
         # second index is x position (left is -1, right is +1)
-        self.world_size = world_size
+        self.world_size = [world_size, world_size]
         self.objects = np.zeros(self.world_size)
         self.visible = np.zeros(self.world_size)
         self.obstacles = np.zeros(self.world_size)
