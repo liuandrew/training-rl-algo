@@ -41,7 +41,7 @@ class GridworldNav(gym.Env):
             3: 'nothing'
         }
         
-        self.num_steps = 0
+        self.current_steps = 0
         
         #generate the character icon
         self.char_icon = np.zeros([15, 15, 3])
@@ -76,6 +76,8 @@ class GridworldNav(gym.Env):
             self.observation_space = spaces.Box(0, 6, shape=(total_width * 2,))
         else:
             self.observation_space = spaces.Box(0, 6, shape=(total_width,))
+
+        self.action_space = spaces.Discrete(4)
         
         
     def step(self, action):
@@ -111,7 +113,12 @@ class GridworldNav(gym.Env):
             if self.objects[pos[0], pos[1]] == 2:
                 reward = self.goal_reward
                 done = True
-               
+        
+        self.current_steps += 1
+
+        if self.current_steps >= self.max_steps:
+            done = True
+            
         observation = self.get_observation()
         return observation, reward, done, {}
         
@@ -195,7 +202,7 @@ class GridworldNav(gym.Env):
 
     
     def reset(self):
-        self.num_steps = 0
+        self.current_steps = 0
         self.generate_world()
         self.randomize_agent_pos()
         
