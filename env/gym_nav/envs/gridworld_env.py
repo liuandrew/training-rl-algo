@@ -78,7 +78,10 @@ class GridworldNav(gym.Env):
             self.observation_space = spaces.Box(0, 6, shape=(total_width,))
 
         self.action_space = spaces.Discrete(4)
-        
+
+        self.generate_world()
+        self.randomize_agent_pos()
+
         
     def step(self, action):
         collision = False
@@ -118,7 +121,7 @@ class GridworldNav(gym.Env):
 
         if self.current_steps >= self.max_steps:
             done = True
-            
+
         observation = self.get_observation()
         return observation, reward, done, {}
         
@@ -205,7 +208,7 @@ class GridworldNav(gym.Env):
         self.current_steps = 0
         self.generate_world()
         self.randomize_agent_pos()
-        
+        return self.get_observation()
     
     def generate_world(self):
         '''
@@ -250,10 +253,7 @@ class GridworldNav(gym.Env):
         self.visible[0, :] = self.color_to_idx['red']
         self.visible[self.world_size[0]-1, :] = self.color_to_idx['red']
         self.visible[:, self.world_size[1]-1] = self.color_to_idx['red']
-        
-        self.visible[0, 0] = self.color_to_idx['green']
-        self.visible[0, -1] = self.color_to_idx['yellow']
-        
+                
         #set walls as obstacles
         self.obstacles[:, 0] = 1
         self.obstacles[0, :] = 1
@@ -272,7 +272,7 @@ class GridworldNav(gym.Env):
         self.agent[1] = np.random.randint(0, 4)
         
         
-    def render(self, mode='human'):
+    def render(self, mode='rgb_array'):
         window_size = [(self.world_size[0]) * 16, (self.world_size[1]) * 16]
         
         img = np.zeros(window_size + [3])
@@ -299,7 +299,8 @@ class GridworldNav(gym.Env):
         img[y*16+1:(y+1)*16, x*16+1:(x+1)*16, :] = np.rot90(self.char_icon, k=self.agent[1])
         
         if mode == 'rgb_array':
-            return img
+            # return img.astype('uint8') * 255
+            return (img * 255).astype('uint8')
         elif mode == 'human':
             plt.figure(figsize=(8, 8))
             plt.imshow(img)
