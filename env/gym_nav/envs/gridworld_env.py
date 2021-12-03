@@ -7,7 +7,7 @@ class GridworldNav(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
     def __init__(self, view_width=2, max_steps=200, give_direction=0, world_gen_func={}, 
                 world_size=20, give_dist=False, num_obstacles=10, goal_size=1,
-                skeleton=True, goal_reward=10):
+                skeleton=True, goal_reward=1):
         '''
         General gridworld with 2d rays of vision. Agent gets to rotate or move forward
         '''
@@ -86,7 +86,7 @@ class GridworldNav(gym.Env):
     def step(self, action):
         collision = False
         done = False
-        reward = -1
+        reward = 0
         
         if action == 0:
             self.agent[1] = (self.agent[1] + 1) % 4
@@ -188,9 +188,9 @@ class GridworldNav(gym.Env):
             colors = np.append(colors, [0]*(self.world_size[left_right_idx] + 1 - right))
         
         if self.give_dist:
-            return np.append(colors, dists)
+            return np.append(colors / 6, dists)
         else:
-            return colors
+            return colors / 6
 
 
     def find_empty_space(self):
