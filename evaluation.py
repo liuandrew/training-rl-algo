@@ -6,13 +6,15 @@ from a2c_ppo_acktr.envs import make_vec_envs
 
 
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
-             device, ret_info=1):
+             device, ret_info=1, capture_video=False, env_kwargs={}):
     '''
     ret_info: level of info that should be tracked and returned
     '''
 
     eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes,
-                              None, eval_log_dir, device, True)
+                              None, eval_log_dir, device, True, 
+                              capture_video=capture_video, 
+                              env_kwargs=env_kwargs)
 
     vec_norm = utils.get_vec_normalize(eval_envs)
     if vec_norm is not None:

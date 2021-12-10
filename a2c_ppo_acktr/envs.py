@@ -103,7 +103,6 @@ def make_vec_envs(env_name,
                   num_frame_stack=None,
                   capture_video=False,
                   env_kwargs={}):
-
     envs = [
         make_env(env_name, seed, i, log_dir, allow_early_resets, capture_video,
                 env_kwargs)

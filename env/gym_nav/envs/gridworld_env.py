@@ -5,11 +5,28 @@ from gym import spaces
 
 class GridworldNav(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
-    def __init__(self, view_width=2, max_steps=200, give_direction=0, world_gen_func={}, 
-                world_size=20, give_dist=False, num_obstacles=10, goal_size=1,
-                skeleton=True, goal_reward=1):
+    def __init__(self, view_width=2, max_steps=200, give_direction=False, world_gen_func={}, 
+                world_size=20, give_dist=False, give_time=False, num_obstacles=10, goal_size=1,
+                skeleton=True, goal_reward=1, reward_shaping=0, sub_goal_reward=0.01):
         '''
         General gridworld with 2d rays of vision. Agent gets to rotate or move forward
+
+        view_width: how many rows to the left and right agent is able to see
+        give_direction: include in observation currently faced direction
+        give_dist: whether to include distances to objects seen in observation
+        world_size: length and width of world
+        num_obstacles: number of randomly generated obstacles
+        goal_size: how big goal should be in length an width
+        goal_reward: amount of reward earned in reaching goal
+
+        reward_shaping: how reward should be given
+            0: only when goal is reached
+            1: always give additional reward inv prop to dist to goal
+            2: when goal is in sight, give additional reward inv proportional to dist to goal
+            3: when goal has been seen once, give additional reward inv prop
+                to dist to goal
+            (for 1-3, also give reward when goal reached)
+        sub_goal_reward: max reward given by sub-task (from reward shaping)
         '''
         super(GridworldNav, self).__init__()
         
@@ -61,21 +78,30 @@ class GridworldNav(gym.Env):
         self.visible = np.zeros(self.world_size)
         self.obstacles = np.zeros(self.world_size)
         self.num_obstacles = num_obstacles
-        # self.goal_size = goal_size
+        self.goal_size = goal_size
         self.goal_reward = goal_reward
-
+        self.sub_goal_reward = sub_goal_reward
+        self.reward_shaping = reward_shaping
+        self.goal_seen = False #tracking whether goal seen yet
         self.agent = [[0, 0], 0] #agent has a position and direction
         #direction is 0: right, 1: up, 2: left, 3: down
         self.view_width = view_width
         self.max_steps = max_steps
         self.give_direction = give_direction
         self.give_dist = give_dist
+        self.give_time = give_time
 
         total_width = view_width * 2 + 1
+
+        observation_width = total_width
         if give_dist:
-            self.observation_space = spaces.Box(0, 6, shape=(total_width * 2,))
-        else:
-            self.observation_space = spaces.Box(0, 6, shape=(total_width,))
+            observation_width = observation_width * 2
+        if give_direction:
+            observation_width += 1
+        if give_time:
+            observation_width += 1
+
+        self.observation_space = spaces.Box(0, 6, shape=(observation_width,))
 
         self.action_space = spaces.Discrete(4)
 
@@ -88,6 +114,8 @@ class GridworldNav(gym.Env):
         done = False
         reward = 0
         
+
+        # -----Perform Action ------ #
         if action == 0:
             self.agent[1] = (self.agent[1] + 1) % 4
         elif action == 2:
@@ -116,13 +144,46 @@ class GridworldNav(gym.Env):
             if self.objects[pos[0], pos[1]] == 2:
                 reward = self.goal_reward
                 done = True
-        
-        self.current_steps += 1
 
+
+        #get observation                
+        observation, colors = self.get_observation()
+
+        #-------- Reward Shaping -------#
+        #calc dist to goal
+        y, x = self.agent[0]
+        space_dists = np.abs(np.array([np.arange(self.world_size[0]) - y]).T) + \
+            np.abs(np.array([np.arange(self.world_size[1]) - x]))
+        dist_to_goal = np.min(space_dists[self.objects == 2])
+
+        max_dist = 2 * self.world_size[0]
+
+        goal_in_view = np.any(colors == 6)
+        if goal_in_view:
+            self.goal_seen = True
+
+        #reward shaping 1: give reward based on distance away for goal
+        if self.reward_shaping == 1:
+            reward += (1 - (dist_to_goal / max_dist)) * self.sub_goal_reward
+
+        #reward shaping 2: give reward based on whether goal is 
+        #in sight and how far it is
+        if self.reward_shaping == 2:
+            if goal_in_view:
+                reward += (1 - (dist_to_goal / max_dist)) * self.sub_goal_reward
+
+        #reward shaping 3: give reward based on whether goal is seen
+        #and once seen, give for total distance away
+        if self.reward_shaping == 3:
+            if self.goal_seen:
+                reward += (1 - (dist_to_goal / max_dist)) * self.sub_goal_reward
+        
+
+        #--- Update Steps ---#
+        self.current_steps += 1
         if self.current_steps >= self.max_steps:
             done = True
 
-        observation = self.get_observation()
         return observation, reward, done, {}
         
                 
@@ -187,13 +248,16 @@ class GridworldNav(gym.Env):
             dists = np.append(dists, [0]*(self.world_size[left_right_idx] + 1 - right))
             colors = np.append(colors, [0]*(self.world_size[left_right_idx] + 1 - right))
         
+        obs = np.array(colors)
         if self.give_dist:
-            return np.append(colors / 6, dists)
-        else:
-            return colors / 6
+            obs = np.append(obs, dists)
+        if self.give_direction:
+            obs = np.append(obs, [self.agent[1]])
+        if self.give_time:
+            obs = np.append(obs, [self.current_steps])
+        return obs, colors
 
-
-    def find_empty_space(self):
+    def find_empty_space(self, dist_from_others=0):
         '''
         Search for an empty space uniformly at random to populate with
         '''
@@ -201,12 +265,23 @@ class GridworldNav(gym.Env):
             y = np.random.randint(0, self.world_size[0])
             x = np.random.randint(0, self.world_size[1])
             if self.obstacles[y, x] == 0:
-                return y, x
+                if dist_from_others > 0:
+                    y_range = np.clip([y-dist_from_others, y+dist_from_others+1], 
+                        [0, 0], [self.world_size[0], self.world_size[0]])
+                    x_range = np.clip([x-dist_from_others, x+dist_from_others+1], 
+                        [0, 0], [self.world_size[1], self.world_size[1]])
+
+                    if np.all(self.obstacles[y_range[0]:y_range[1], x_range[0]:x_range[1]] == 0):
+                        return y, x
+
+                else:
+                    return y, x
 
     
     def reset(self):
         self.current_steps = 0
         self.generate_world()
+        self.goal_seen = False
         self.randomize_agent_pos()
         return self.get_observation()
     
@@ -228,10 +303,10 @@ class GridworldNav(gym.Env):
             self.visible[y, x] = np.random.randint(1, 6)
             
         #generate a goal
-        y, x = self.find_empty_space()
-        self.objects[y, x] = 2
-        self.obstacles[y, x] = 0
-        self.visible[y, x] = 6
+        y, x = self.find_empty_space(self.goal_size - 1)
+        self.objects[y:y+self.goal_size, x:x+self.goal_size] = 2
+        self.obstacles[y:y+self.goal_size, x:x+self.goal_size] = 0
+        self.visible[y:y+self.goal_size, x:x+self.goal_size] = 6
             
         
 
@@ -306,4 +381,7 @@ class GridworldNav(gym.Env):
             plt.imshow(img)
             plt.xticks([])
             plt.yticks([])
+
+    def seed(self, seed=0):
+        np.random.seed(seed)
             
