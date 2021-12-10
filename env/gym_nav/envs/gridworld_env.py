@@ -147,7 +147,7 @@ class GridworldNav(gym.Env):
 
 
         #get observation                
-        observation, colors = self.get_observation()
+        obs, colors = self.get_observation()
 
         #-------- Reward Shaping -------#
         #calc dist to goal
@@ -184,7 +184,7 @@ class GridworldNav(gym.Env):
         if self.current_steps >= self.max_steps:
             done = True
 
-        return observation, reward, done, {}
+        return obs, reward, done, {}
         
                 
     def get_observation(self):
@@ -283,7 +283,8 @@ class GridworldNav(gym.Env):
         self.generate_world()
         self.goal_seen = False
         self.randomize_agent_pos()
-        return self.get_observation()
+        obs, colors = self.get_observation()
+        return obs
     
     def generate_world(self):
         '''
