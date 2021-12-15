@@ -97,7 +97,7 @@ def write_latest_exp_complete(file):
 
 
 
-def run_experiment(file, python3=False, cont=False):
+def run_experiment(file, python3=False, cont=False, track=False):
     '''
     Pass a config file to run an experiment
     Save the experiment to experiment log
@@ -105,21 +105,24 @@ def run_experiment(file, python3=False, cont=False):
         then archive the config file
     Otherwise delete the row that was added
     '''
-    if cont is False:
+    if cont is False and track:
         add_exp_row(file)
     run_string = convert_config_to_command(file, python3, cont)
     os.system(run_string)
 
-    exp_log = load_exp_log()
-    idx = exp_log[exp_log['file'] == file].index.max()
-    if exp_log.loc[idx, 'success'] is True:
-        #experiment completed successfully
-        ext = str(int(datetime.now().timestamp()))
-        shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
-    else:
-        exp_log.loc[idx, 'success'] = False
+    if track:
+        exp_log = load_exp_log()
+        idx = exp_log[exp_log['file'] == file].index.max()
+        if exp_log.loc[idx, 'success'] is True:
+            #experiment completed successfully
+            ext = str(int(datetime.now().timestamp()))
+            shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
+        else:
+            exp_log.loc[idx, 'success'] = False
 
-    save_exp_log(exp_log)
+        save_exp_log(exp_log)
+    
+
 
 
 if __name__ == "__main__":
@@ -135,6 +138,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
+
+    parser.add_argument('--track', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='if toggled, attempt to fill out experiment_log pandas file')
     args = parser.parse_args()
     # print(args.python3)
 
@@ -151,5 +157,5 @@ if __name__ == "__main__":
         if file not in ['.ipynb_checkpoints', 'archive']:
             print('running experiment: ', file)
             # print(args.cont)
-            run_experiment(file, python3=args.python3, cont=args.cont)
+            run_experiment(file, python3=args.python3, cont=args.cont, track=args.track)
             print('experiment complete')
