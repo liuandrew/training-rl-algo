@@ -1,0 +1,30 @@
+quantify how long they spend looking at the goal
+or how long to get to goal after spotting
+
+resulting behavior with different reward structure
+    distribution of distance from goal with time (actual distribution as a function of time)
+    at a given time step, average and standard deviation distance away from goal
+
+    could be that one hangs around far away and then 
+
+
+maybe look at percentage of trials where goal is not reached to see if training is better
+    using the reward shaping
+
+    also look at individual agents to see how much reaching the goal affects
+
+make into section of preliminary results - in simple task and reward structure
+
+covering more territory as auxiliary task or within episode curiosity
+competition - 2 agents to get there faster
+
+maybe also start to include colored walls to see if it can build representation of map
+
+
+next also try invisible platform with red walls vs colored walls
+
+
+1 document a little better differences between reward structures
+2 0-1 reward structure with auxiliary task
+3 hidden platform
+4 update document with preliminary results to see if you want to revise aims

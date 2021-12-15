@@ -7,7 +7,8 @@ class GridworldNav(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
     def __init__(self, view_width=2, max_steps=200, give_direction=False, world_gen_func={}, 
                 world_size=20, give_dist=False, give_time=False, num_obstacles=10, goal_size=1,
-                skeleton=True, goal_reward=1, reward_shaping=0, sub_goal_reward=0.01):
+                skeleton=True, goal_reward=1, reward_shaping=0, sub_goal_reward=0.01,
+                wall_colors=1):
         '''
         General gridworld with 2d rays of vision. Agent gets to rotate or move forward
 
@@ -27,6 +28,14 @@ class GridworldNav(gym.Env):
                 to dist to goal
             (for 1-3, also give reward when goal reached)
         sub_goal_reward: max reward given by sub-task (from reward shaping)
+
+        wall_colors: how many colors the walls should take (1, 2, 2.5, 3, 4)
+            1: red, red, red, red
+            2: red, green, red, green
+                2.5 (alt configuration): red, red, green, green
+            3: red, green, red, blue
+                3.5 (alt configuration): red, red, green, blue
+            4: red, green, blue, yellow
         '''
         super(GridworldNav, self).__init__()
         
@@ -39,8 +48,8 @@ class GridworldNav(gym.Env):
             'red': 1,
             'green': 2,
             'blue': 3,
-            'purple': 4,
-            'yellow': 5,
+            'yellow': 4,
+            'purple': 5,
             'white': 6
         }
         self.idx_to_rgb = {
@@ -83,6 +92,7 @@ class GridworldNav(gym.Env):
         self.sub_goal_reward = sub_goal_reward
         self.reward_shaping = reward_shaping
         self.goal_seen = False #tracking whether goal seen yet
+        self.wall_colors = wall_colors
         self.agent = [[0, 0], 0] #agent has a position and direction
         #direction is 0: right, 1: up, 2: left, 3: down
         self.view_width = view_width
@@ -318,6 +328,20 @@ class GridworldNav(gym.Env):
         '''
         Set walls to red color
         '''
+        walls = []
+        if self.wall_colors == 1:
+            walls = ['red', 'red', 'red', 'red']
+        elif self.wall_colors == 2:
+            walls = ['red', 'green', 'red', 'green']
+        elif self.wall_colors == 2.5:
+            walls = ['red', 'red', 'green', 'green']
+        elif self.wall_colors == 3:
+            walls = ['red', 'green', 'red', 'blue']
+        elif self.wall_colors == 3.5:
+            walls = ['red', 'red', 'green', 'blue']
+        elif self.wall_colors == 4:
+            walls = ['red', 'green', 'blue', 'yellow']
+
         #generate walls
         self.objects[:, 0] = self.object_to_idx['wall']
         self.objects[0, :] = self.object_to_idx['wall']
@@ -325,10 +349,10 @@ class GridworldNav(gym.Env):
         self.objects[:, self.world_size[1]-1] = self.object_to_idx['wall']
         
         #color walls red
-        self.visible[:, 0] = self.color_to_idx['red']
-        self.visible[0, :] = self.color_to_idx['red']
-        self.visible[self.world_size[0]-1, :] = self.color_to_idx['red']
-        self.visible[:, self.world_size[1]-1] = self.color_to_idx['red']
+        self.visible[:, 0] = self.color_to_idx[walls[0]]
+        self.visible[0, :] = self.color_to_idx[walls[1]]
+        self.visible[:, self.world_size[1]-1] = self.color_to_idx[walls[2]]
+        self.visible[self.world_size[0]-1, :] = self.color_to_idx[walls[3]]
                 
         #set walls as obstacles
         self.obstacles[:, 0] = 1
