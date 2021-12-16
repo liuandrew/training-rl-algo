@@ -46,6 +46,19 @@ def convert_config_to_command(file, python3=False, cont=False):
 
 
 
+def reset_exp_log():
+    '''
+    reset the experiment log in case of write error
+    '''
+    exp_log = pd.DataFrame(columns=['file', 'begin', 'end', 'exp_name', 'save_name', 'num_env_steps',
+       'env_name', 'recurrent_policy', 'algo', 'num_mini_batch',
+       'num_processes', 'success', 'env_kwargs', 'wandb_project_name',
+       'capture_video', 'track', 'recurrent'])
+    pickle.dump(exp_log, open('experiment_log', 'wb'))
+    return exp_log
+
+
+
 
 def save_exp_log(exp_log):
     '''
@@ -60,7 +73,10 @@ def load_exp_log():
     '''
     load experiment log to globals
     '''
-    exp_log = pickle.load(open('experiment_log', 'rb'))
+    try:
+        exp_log = pickle.load(open('experiment_log', 'rb'))
+    except:
+        exp_log = reset_exp_log
     return exp_log
 
 
@@ -97,7 +113,7 @@ def write_latest_exp_complete(file):
 
 
 
-def run_experiment(file, python3=False, cont=False, track=False):
+def run_experiment(file, python3=False, cont=False):
     '''
     Pass a config file to run an experiment
     Save the experiment to experiment log
@@ -105,22 +121,21 @@ def run_experiment(file, python3=False, cont=False, track=False):
         then archive the config file
     Otherwise delete the row that was added
     '''
-    if cont is False and track:
+    if cont is False:
         add_exp_row(file)
     run_string = convert_config_to_command(file, python3, cont)
     os.system(run_string)
 
-    if track:
-        exp_log = load_exp_log()
-        idx = exp_log[exp_log['file'] == file].index.max()
-        if exp_log.loc[idx, 'success'] is True:
-            #experiment completed successfully
-            ext = str(int(datetime.now().timestamp()))
-            shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
-        else:
-            exp_log.loc[idx, 'success'] = False
+    exp_log = load_exp_log()
+    idx = exp_log[exp_log['file'] == file].index.max()
+    if exp_log.loc[idx, 'success'] is True:
+        #experiment completed successfully
+        shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
+        ext = str(int(datetime.now().timestamp()))
+    else:
+        exp_log.loc[idx, 'success'] = False
 
-        save_exp_log(exp_log)
+    save_exp_log(exp_log)
     
 
 
@@ -139,8 +154,6 @@ if __name__ == "__main__":
     parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
 
-    parser.add_argument('--track', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
-        help='if toggled, attempt to fill out experiment_log pandas file')
     args = parser.parse_args()
     # print(args.python3)
 
@@ -157,5 +170,5 @@ if __name__ == "__main__":
         if file not in ['.ipynb_checkpoints', 'archive']:
             print('running experiment: ', file)
             # print(args.cont)
-            run_experiment(file, python3=args.python3, cont=args.cont, track=args.track)
+            run_experiment(file, python3=args.python3, cont=args.cont)
             print('experiment complete')
