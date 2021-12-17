@@ -130,8 +130,8 @@ def run_experiment(file, python3=False, cont=False):
     idx = exp_log[exp_log['file'] == file].index.max()
     if exp_log.loc[idx, 'success'] is True:
         #experiment completed successfully
-        shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
         ext = str(int(datetime.now().timestamp()))
+        shutil.move(CONFIG_FOLDER + file, CONFIG_FOLDER + 'archive/' + file + ext)
     else:
         exp_log.loc[idx, 'success'] = False
 
