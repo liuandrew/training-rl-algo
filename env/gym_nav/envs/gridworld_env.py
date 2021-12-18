@@ -8,7 +8,7 @@ class GridworldNav(gym.Env):
     def __init__(self, view_width=2, max_steps=200, give_direction=False, world_gen_func={}, 
                 world_size=20, give_dist=False, give_time=False, num_obstacles=0, goal_size=1,
                 skeleton=True, goal_reward=1, reward_shaping=0, sub_goal_reward=0.01,
-                wall_colors=1, task_structure=1, goal_wiggle=0):
+                wall_colors=1, task_structure=1, goal_wiggle=0, poster=False):
         '''
         General gridworld with 2d rays of vision. Agent gets to rotate or move forward
 
@@ -35,13 +35,15 @@ class GridworldNav(gym.Env):
                 2.5 (alt configuration): red, red, green, green
             3: red, green, red, blue
                 3.5 (alt configuration): red, red, green, blue
-            4: red, green, blue, yellow
+            4: red, green, blue, purple
 
         task_structure: the exact type of task given
             1: visible goal, resetting position every episode
             2: invisible goal, fixed position for goal
 
-        goal wiggle: whether goal should be moved from its fixed position randomly
+        goal_wiggle: whether goal should be moved from its fixed position randomly
+
+        poster: set to a number to choose a position for the "poster"
         '''
         super(GridworldNav, self).__init__()
         
@@ -62,8 +64,8 @@ class GridworldNav(gym.Env):
             1: np.array([0.9, 0, 0]),
             2: np.array([0, 0.9, 0]),
             3: np.array([0, 0, 0.9]),
-            4: np.array([0.9, 0, 0.9]),
-            5: np.array([0.9, 0.9, 0]),
+            4: np.array([0.9, 0.9, 0]),
+            5: np.array([0.9, 0, 0.9]),
             6: np.array([0.9, 0.9, 0.9])
         }
         self.action_keys = {
@@ -102,6 +104,7 @@ class GridworldNav(gym.Env):
         self.task_structure = task_structure
         self.goal_wiggle = goal_wiggle
         self.agent = [[0, 0], 0] #agent has a position and direction
+        self.poster = poster
         #direction is 0: right, 1: up, 2: left, 3: down
         self.view_width = view_width
         self.max_steps = max_steps
@@ -363,7 +366,7 @@ class GridworldNav(gym.Env):
         elif self.wall_colors == 3.5:
             walls = ['red', 'red', 'green', 'blue']
         elif self.wall_colors == 4:
-            walls = ['red', 'green', 'blue', 'yellow']
+            walls = ['red', 'green', 'blue', 'purple']
 
         #generate walls
         self.objects[:, 0] = self.object_to_idx['wall']
@@ -382,6 +385,17 @@ class GridworldNav(gym.Env):
         self.obstacles[0, :] = 1
         self.obstacles[self.world_size[0]-1, :] = 1
         self.obstacles[:, self.world_size[1]-1] = 1
+
+        if self.poster is not False:
+            mid_point = int(np.floor(self.world_size[0] / 2))
+            if self.poster == 0:
+                self.visible[mid_point-1:mid_point+2, -1] = self.color_to_idx['yellow']
+            elif self.poster == 1:
+                self.visible[0, mid_point-1:mid_point+2] = self.color_to_idx['yellow']
+            elif self.poster == 2:
+                self.visible[mid_point-1:mid_point+2, 0] = self.color_to_idx['yellow']
+            elif self.poster == 3:
+                self.visible[-1, mid_point-1:mid_point+2] = self.color_to_idx['yellow']
         
         
         
