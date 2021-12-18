@@ -6,9 +6,9 @@ from gym import spaces
 class GridworldNav(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
     def __init__(self, view_width=2, max_steps=200, give_direction=False, world_gen_func={}, 
-                world_size=20, give_dist=False, give_time=False, num_obstacles=10, goal_size=1,
+                world_size=20, give_dist=False, give_time=False, num_obstacles=0, goal_size=1,
                 skeleton=True, goal_reward=1, reward_shaping=0, sub_goal_reward=0.01,
-                wall_colors=1):
+                wall_colors=1, task_structure=1, goal_wiggle=0):
         '''
         General gridworld with 2d rays of vision. Agent gets to rotate or move forward
 
@@ -36,6 +36,12 @@ class GridworldNav(gym.Env):
             3: red, green, red, blue
                 3.5 (alt configuration): red, red, green, blue
             4: red, green, blue, yellow
+
+        task_structure: the exact type of task given
+            1: visible goal, resetting position every episode
+            2: invisible goal, fixed position for goal
+
+        goal wiggle: whether goal should be moved from its fixed position randomly
         '''
         super(GridworldNav, self).__init__()
         
@@ -93,6 +99,8 @@ class GridworldNav(gym.Env):
         self.reward_shaping = reward_shaping
         self.goal_seen = False #tracking whether goal seen yet
         self.wall_colors = wall_colors
+        self.task_structure = task_structure
+        self.goal_wiggle = goal_wiggle
         self.agent = [[0, 0], 0] #agent has a position and direction
         #direction is 0: right, 1: up, 2: left, 3: down
         self.view_width = view_width
@@ -313,12 +321,27 @@ class GridworldNav(gym.Env):
             self.obstacles[y, x] = 1
             self.visible[y, x] = np.random.randint(1, 6)
             
-        #generate a goal
-        y, x = self.find_empty_space(self.goal_size - 1)
-        self.objects[y:y+self.goal_size, x:x+self.goal_size] = 2
-        self.obstacles[y:y+self.goal_size, x:x+self.goal_size] = 0
-        self.visible[y:y+self.goal_size, x:x+self.goal_size] = 6
-            
+
+        if self.task_structure == 1:
+            #generate a goal with random position
+            y, x = self.find_empty_space(self.goal_size - 1)
+            self.objects[y:y+self.goal_size, x:x+self.goal_size] = 2
+            self.obstacles[y:y+self.goal_size, x:x+self.goal_size] = 0
+            self.visible[y:y+self.goal_size, x:x+self.goal_size] = 6
+
+        if self.task_structure == 2:
+            y, x = np.floor(np.array(self.world_size) * .75).astype(int)
+            if self.goal_wiggle > 0:
+                wiggle = np.random.choice(np.arange(-self.goal_wiggle, self.goal_wiggle + 1),
+                    size=2)
+                y = y + wiggle[0]
+                x = x + wiggle[1]
+
+            self.objects[y:y+self.goal_size, x:x+self.goal_size] = 2
+            self.obstacles[y:y+self.goal_size, x:x+self.goal_size] = 0
+            self.visible[y:y+self.goal_size, x:x+self.goal_size] = 0
+
+
         
 
 
@@ -392,7 +415,10 @@ class GridworldNav(gym.Env):
                     # print(i)
                     # img[i*16+1:(i+1)*16, j*16+1:(j+1)*16] = self.idx_to_rgb[self.visible[i, j]]
                     img = color_block(j, i, self.idx_to_rgb[self.visible[i, j]], img)
-                    
+                elif self.objects[i, j] != 0:
+                    #draw invisible objects for viewer
+                    img = color_block(j, i, [0.6, 0.6, 0.6], img)
+
         #draw agent
         y = self.agent[0][0]
         x = self.agent[0][1]
