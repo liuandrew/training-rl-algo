@@ -6,9 +6,27 @@ from a2c_ppo_acktr.envs import make_vec_envs
 
 
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
-             device, ret_info=1, capture_video=False, env_kwargs={}):
+             device, ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
+             num_episodes=10):
     '''
     ret_info: level of info that should be tracked and returned
+    capture_video: whether video should be captured for episodes
+    env_kwargs: any kwargs to create environment with
+    data_callback: a function that should be called at each step to pull information
+        from the environment if needed. The function will take arguments
+            def callback(actor_critic, vec_envs, recurrent_hidden_states, data):
+        actor_critic: the actor_critic network
+        vec_envs: the vec envs (can call for example vec_envs.get_attr('objects') to pull data)
+        recurrent_hidden_states: these are given in all data, but may want to use in computation
+        obs: observation this step (after taking action) - 
+            note that initial observation is never seen by data_callback
+            also note that this observation will have the mean normalized
+            so may instead want to call vec_envs.get_method('get_observation')
+        action: actions this step
+        reward: reward this step
+        data: a data dictionary that will continuously be passed to be updated each step
+            it will start as an empty dicionary, so keys must be initialized
+        see below at example_data_callback in this file for an example
     '''
 
     eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes,
@@ -27,13 +45,15 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     all_actions = []
     all_rewards = []
     all_hidden_states = []
+    all_dones = []
+    data = {}
 
     obs = eval_envs.reset()
     eval_recurrent_hidden_states = torch.zeros(
         num_processes, actor_critic.recurrent_hidden_state_size, device=device)
     eval_masks = torch.zeros(num_processes, 1, device=device)
 
-    while len(eval_episode_rewards) < 10:
+    while len(eval_episode_rewards) < num_episodes:
         with torch.no_grad():
             _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                 obs,
@@ -53,6 +73,10 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         all_actions.append(action)
         all_rewards.append(reward)
         all_hidden_states.append(eval_recurrent_hidden_states)
+        all_dones.append(done)
+
+        data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
+            obs, action, reward, data)
 
         for info in infos:
             if 'episode' in info.keys():
@@ -63,4 +87,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     print(" Evaluation using {} episodes: mean reward {:.5f}\n".format(
         len(eval_episode_rewards), np.mean(eval_episode_rewards)))
 
-    return all_obs, all_actions, all_rewards, all_hidden_states, eval_envs
+    return all_obs, all_actions, all_rewards, all_hidden_states, all_dones, eval_envs, data
+
+
+def example_data_callback(actor_critic, vec_envs, recurrent_hidden_states, data):
+    pass

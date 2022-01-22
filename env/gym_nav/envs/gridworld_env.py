@@ -285,7 +285,7 @@ class GridworldNav(gym.Env):
         while True:
             y = np.random.randint(0, self.world_size[0])
             x = np.random.randint(0, self.world_size[1])
-            if self.obstacles[y, x] == 0:
+            if self.obstacles[y, x] == 0 and self.objects[y, x] == 0:
                 if dist_from_others > 0:
                     y_range = np.clip([y-dist_from_others, y+dist_from_others+1], 
                         [0, 0], [self.world_size[0], self.world_size[0]])

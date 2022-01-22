@@ -7,8 +7,31 @@ MAX_MARCH = 20
 EPSILON = 0.1
 DEG_TO_RAD = 0.0174533
 WINDOW_SIZE = (200, 300) # Width x Height in pixels
+MAX_DIST = np.linalg.norm(WINDOW_SIZE)
 
-def generate_box(pos=None, size=[10, 25], inside_window=True, color=(255, 255, 255), is_goal=False):
+object_to_idx = {
+    'wall': 1,
+    'goal': 2
+}
+color_to_idx = {
+    'invisible': 0,
+    'red': 1,
+    'green': 2,
+    'blue': 3,
+    'yellow': 4,
+    'purple': 5,
+    'white': 6
+}
+idx_to_rgb = {
+    1: np.array([230, 0, 0]),
+    2: np.array([0, 230, 0]),
+    3: np.array([0, 0, 230]),
+    4: np.array([230, 230, 0]),
+    5: np.array([230, 0, 230]),
+    6: np.array([230, 230, 230])
+}
+
+def generate_box(pos=None, size=[10, 25], inside_window=True, color=1, is_goal=False):
     '''
     Generate a box with width and height drawn randomly uniformly from size[0] to size[1]
     if inside_window is True, we force the box to stay inside the window
@@ -26,7 +49,7 @@ def generate_box(pos=None, size=[10, 25], inside_window=True, color=(255, 255, 2
     else:
         return Box(pos, box_size, color=color, is_goal=is_goal)
 
-def generate_circle(pos=None, radius=[10, 25], inside_window=True, color=(255, 255, 255), is_goal=False):
+def generate_circle(pos=None, radius=[10, 25], inside_window=True, color=1, is_goal=False):
     circ_rad = np.random.uniform(radius[0], radius[1])
     if pos is None:
         if inside_window:
@@ -39,7 +62,7 @@ def generate_circle(pos=None, radius=[10, 25], inside_window=True, color=(255, 2
     else:
         return Circle(pos, circ_rad, color=color, is_goal=is_goal)
 
-def generate_boxes(num_boxes=5, size=[10, 25], is_goal=False, inside_window=True, color=(255, 255, 255)):
+def generate_boxes(num_boxes=5, size=[10, 25], is_goal=False, inside_window=True, color=1):
     centers = []
     sizes = []
     boxes = []
@@ -53,7 +76,7 @@ def generate_boxes(num_boxes=5, size=[10, 25], is_goal=False, inside_window=True
     sizes = np.array(sizes)
     return boxes, centers, sizes
 
-def generate_circles(num_circles=5, radius=[10, 25], is_goal=False, inside_window=True, color=(255, 255, 255)):
+def generate_circles(num_circles=5, radius=[10, 25], is_goal=False, inside_window=True, color=1):
     centers = []
     radii = []
     circles = []
@@ -104,10 +127,10 @@ def add_circle(circle):
     
     
 def add_walls():
-    add_box(Box(np.array([0, 0]), np.array([1, WINDOW_SIZE[1]]), color=(0, 255, 0)))
-    add_box(Box(np.array([0, 0]), np.array([WINDOW_SIZE[0], 1]), color=(0, 255, 0)))
-    add_box(Box(np.array([0, WINDOW_SIZE[1]]), np.array([WINDOW_SIZE[0], 1]), color=(0, 255, 0)))
-    add_box(Box(np.array([WINDOW_SIZE[0], 0]), np.array([1, WINDOW_SIZE[1]]), color=(0, 255, 0)))
+    add_box(Box(np.array([0, 0]), np.array([1, WINDOW_SIZE[1]]), color=1))
+    add_box(Box(np.array([0, 0]), np.array([WINDOW_SIZE[0], 1]), color=1))
+    add_box(Box(np.array([0, WINDOW_SIZE[1]]), np.array([WINDOW_SIZE[0], 1]), color=1))
+    add_box(Box(np.array([WINDOW_SIZE[0], 0]), np.array([1, WINDOW_SIZE[1]]), color=1))
 
     
 
@@ -122,7 +145,7 @@ def spaced_random_pos(sep=5):
 
 
 
-def generate_world(num_objects=5, min_goal_sep=15, color=(0, 255, 0)):
+def generate_world(num_objects=5, min_goal_sep=15, color=1):
     reset_objects()
     '''generate obstacles'''
     boxes, box_centers, box_sizes = generate_boxes(num_objects, inside_window=False, color=color)
@@ -148,7 +171,7 @@ def generate_world(num_objects=5, min_goal_sep=15, color=(0, 255, 0)):
             searching = False
             
 #     pos = np.array([500, 500])
-    goal = generate_box(pos=pos, size=[15, 15], is_goal=True, color=(255, 0, 0))
+    goal = generate_box(pos=pos, size=[15, 15], is_goal=True, color=6)
     globals()['goal'] = goal
     add_box(goal)
 
@@ -171,7 +194,7 @@ def block_view_world(character, block_size=25, randomize_heading=0):
     
     #add a single block in the center of the screen
     add_box(Box(np.array([WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2]),
-               np.array([block_size, block_size]), color=(0, 255, 0)))
+               np.array([block_size, block_size]), color=2))
     add_walls()
     
     base_size = 15
@@ -183,7 +206,7 @@ def block_view_world(character, block_size=25, randomize_heading=0):
         x = np.cos(angle) * base_radius
         y = np.sin(angle) * base_radius
         goal = Box(np.array([x + base_x, y + base_y]), np.array([base_size, base_size]), 
-            is_goal=True, color=(255, 0, 0))
+            is_goal=True, color=6)
         globals()['goal'] = goal
         add_box(goal)
         
@@ -203,7 +226,7 @@ def block_view_world(character, block_size=25, randomize_heading=0):
         #add the goal
         goal = Box(np.array([WINDOW_SIZE[0] - 50, WINDOW_SIZE[1]/2]),
                    np.array([base_size, base_size]),
-                   is_goal=True, color=(255, 0, 0))
+                   is_goal=True, color=6)
         globals()['goal'] = goal
         add_box(goal)
 
@@ -273,7 +296,7 @@ def circle_sdfs(p):
     
 
 class Circle():
-    def __init__(self, center, radius, color=(255, 255, 255), is_goal=False):
+    def __init__(self, center, radius, color=1, is_goal=False):
         self.center = center
         self.radius = radius
         self.color = color
@@ -283,11 +306,12 @@ class Circle():
         return dist(self.center - p) - self.radius
     
     def draw(self):
-        pygame.draw.circle(display, self.color, self.center, self.radius)
+        draw_color = idx_to_rgb[self.color]
+        pygame.draw.circle(display, draw_color, self.center, self.radius)
         
 
 class Box():
-    def __init__(self, center, size, color=(255, 255, 255), is_goal=False):
+    def __init__(self, center, size, color=1, is_goal=False):
         self.center = center
         self.size = size #this is a size 2 array for length and height
         self.color = color
@@ -301,11 +325,12 @@ class Box():
         return unsigned_dist + dist_inside_box
     
     def draw(self):
-        pygame.draw.rect(display, self.color, self.rect)
+        draw_color = idx_to_rgb[self.color]
+        pygame.draw.rect(display, draw_color, self.rect)
         
         
 class Ray():
-    def __init__(self, start, angle, color='white', render_march=False):
+    def __init__(self, start, angle, color=6, render_march=False):
         '''
         Ray for ray marching
         if render_march is True, then we render the sdf circles used to calculate march 
@@ -353,13 +378,14 @@ class Ray():
     
     def draw(self):
         end = self.start + np.array([np.cos(self.angle), np.sin(self.angle)]) * self.obj_dist
-        pygame.draw.line(display, self.color, self.start, end)
+        draw_color = idx_to_rgb[self.color]
+        pygame.draw.line(display, draw_color, self.start, end)
             
             
             
             
 class Character:
-    def __init__(self, pos=[WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2], angle=0, color='yellow', size=5,
+    def __init__(self, pos=[WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2], angle=0, color=4, size=5,
                 fov=120*DEG_TO_RAD, num_rays=30, render_rays=True):
         '''
         Generate a character that can move through the window
@@ -416,10 +442,11 @@ class Character:
         point2 = [self.pos[0] - math.cos(self.angle)*self.size*.8, self.pos[1] - math.sin(self.angle)*self.size*.8]
         point3 = [self.pos[0] - (math.cos(self.angle-0.3))*self.size, 
                   self.pos[1] - (math.sin(self.angle-0.3))*self.size]
-        
+
+        draw_color = idx_to_rgb[self.color]
         pygame.draw.polygon(
             display,
-            self.color,
+            draw_color,
             [self.pos, point1, point2, point3, self.pos]
         )
         if self.render_rays:
@@ -488,7 +515,7 @@ class Character:
         self.update_rays()
         
     
-    def ray_obs(self, max_depth=1000):
+    def ray_obs(self, max_depth=MAX_DIST):
         '''
         Get all rays and their distances to objects
         normalize_depth: divide depth readings by value 
@@ -505,10 +532,13 @@ class Character:
 #         else:
 #             ray_depths = np.array(ray_depths)
             
-        ray_colors = np.array(ray_colors)
+        # ray_colors = np.array(ray_colors)
+        ray_colors = np.array(ray_colors) / 6
+        ray_depths = np.array(ray_depths) / max_depth
+        visual = np.append(ray_colors, ray_depths)
 #         background_colors = np.full(ray_colors.shape, 0)
-        ray_depths = np.clip(ray_depths, 0, max_depth) / 1000
-        visual = (1 - ray_depths.reshape(-1, 1)) * ray_colors / 255
+        # ray_depths = np.clip(ray_depths, 0, max_depth) / 1000
+        # visual = (1 - ray_depths.reshape(-1, 1)) * ray_colors / 255
         
 #         return ray_depths, ray_colors
         return visual
@@ -545,11 +575,13 @@ def randomize_location_and_angle(character, sep=True):
     character.update_rays()
 
 
-class NavEnv(gym.Env):
+class NavEnvFlat(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
     def __init__(self, num_rays=30, max_steps=200, num_objects=5,
-                rew_structure='dist', give_heading=0, verbose=0, flat=True,
-                world_gen_func=None, world_gen_params={}):
+                rew_structure='dist', give_heading=0, verbose=0,
+                world_gen_func=None, world_gen_params={}, give_dist=True,
+                give_time=False, collission_penalty=0, default_reward=0,
+                sub_goal_reward=0.01):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -560,7 +592,7 @@ class NavEnv(gym.Env):
             set the agent position and heading
             The character will be passed as the argument
         '''
-        super(NavEnv, self).__init__()
+        super(NavEnvFlat, self).__init__()
 
         if 'pygame' not in globals():
             global pygame
@@ -568,14 +600,21 @@ class NavEnv(gym.Env):
 
 
         self.total_rewards = 0
-        
+        self.give_dist = give_dist
         self.give_heading = give_heading
-        self.flat = flat
+        self.give_time = give_time
+        self.collission_penalty = collission_penalty
+        self.default_reward = default_reward
+        self.sub_goal_reward = sub_goal_reward
+        observation_width = num_rays
+        if give_dist:
+            observation_width = observation_width * 2
         if give_heading:
-            self.observation_space = spaces.Box(low=0, high=1, shape=((num_rays + 1)*3,))
-        else:
-    #         self.observation_space = spaces.Box(low=0, high=1, shape=(num_rays*2,), dtype=np.float)
-            self.observation_space = spaces.Box(low=0, high=1, shape=(num_rays*3,))
+            observation_width += 1
+        if give_time:
+            observation_width += 1
+
+        self.observation_space = spaces.Box(low=0, high=6, shape=(observation_width,))
         self.action_space = spaces.Discrete(4) #turn left, forward, right as actions
         
         self.max_steps = max_steps
@@ -600,24 +639,25 @@ class NavEnv(gym.Env):
         
         
     def step(self, action):
-        reward = -1
+        reward = self.default_reward
         collide_with_object = False
         done = False
         info = {}
         
         if action == 0:
-            self.character.rotate(-0.1)
+            self.character.rotate(-0.2)
         if action == 1:
             collide_with_object = self.character.move(10)
         if action == 2:
-            self.character.rotate(0.1)
+            self.character.rotate(0.2)
         if action == 3:
             pass
 
         if self.rew_structure == 'dist':
             goal = objects[-1]
-            dist_to_goal = np.clip(dist(goal.center - self.character.pos), 0, 1000) / 1000
-            reward = float(-dist_to_goal)
+            dist_to_goal = self.sub_goal_reward * \
+                (MAX_DIST-dist(goal.center - self.character.pos)) / MAX_DIST
+            reward = float(dist_to_goal)
 
             
         if collide_with_object is not False:
@@ -625,11 +665,11 @@ class NavEnv(gym.Env):
             if obj.is_goal:
                 if self.verbose:
                     print('goal reached!')
-                reward = float(100)
+                reward = float(1)
                 done = True
             else:
 #                 reward = -10
-                reward = float(-1)
+                reward = float(self.collission_penalty)
         
         
         observation = self.get_observation()
@@ -683,6 +723,7 @@ class NavEnv(gym.Env):
 #         return np.append(ray_depths, ray_colors)
 
         if self.give_heading > 0:
+            raise NotImplementedError('Have not adjusted give_heading code')
             #tell where the goal is distance and heading
             ray_obs = self.character.ray_obs()
             goal = objects[-1]
@@ -701,18 +742,15 @@ class NavEnv(gym.Env):
                 obs = np.vstack([ray_obs, [dist_to_goal, heading/3.14, self.character.angle]])
             
                         
-            if self.flat:
-                return np.array(obs.reshape(-1), dtype='float')
-            else:
-                return np.array(obs, dtype='float')
+            return np.array(obs.reshape(-1), dtype='float')
             
         else:
-            if self.flat:
-                return np.array(self.character.ray_obs().reshape(-1), dtype='float')
-            else:
-                return np.array(self.character.ray_obs(), dtype='float')
+            obs = self.character.ray_obs()
+            if not self.give_dist:
+                obs = obs[:self.num_rays]
+
+            return np.array(self.character.ray_obs().reshape(-1), dtype='float')
         
 
 
-        
     
