@@ -553,7 +553,7 @@ class NavEnvFlat(gym.Env):
         image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
         image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         #trim borders
-        # image_from_plot = image_from_plot[52:380,52:390,:]
+        image_from_plot = image_from_plot[52:380,52:390,:]
         
         # with io.BytesIO() as buff:
         #     fig.savefig(buff, format='raw')
@@ -561,13 +561,12 @@ class NavEnvFlat(gym.Env):
         #     data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
         # w, h = fig.canvas.get_width_height()
         # im = data.reshape((int(h), int(w), -1))
-
-        plt.close()
         
         if mode == 'human':
             plt.show()
             
         if mode == 'rgb_array':
+            plt.close()
             return image_from_plot
             
             # return im
@@ -608,18 +607,18 @@ class NavEnvFlat(gym.Env):
         
 
     def generate_world(self):
-        self.boxes = self.make_walls()
+        self.boxes, walls, wall_refs = self.make_walls()
 
         #generate a goal
         corner = np.random.uniform(low=30, high=270, size=(2,))
         goal = Box(corner, [20, 20], color=6, is_goal=True)
-
+        goal_walls, goal_wall_refs = self.get_walls([goal])
         if self.goal_visible:
-            self.vis_walls, self.vis_wall_refs = self.get_walls(self.boxes + [goal])
-            self.col_walls, self.col_wall_refs = self.get_walls(self.boxes + [goal])
+            self.vis_walls, self.vis_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
         else:
-            self.vis_walls, self.vis_wall_refs = self.get_walls(self.boxes)
-            self.col_walls, self.col_wall_refs = self.get_walls(self.boxes + [goal])
+            self.vis_walls, self.vis_wall_refs = walls, wall_refs
+            self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
         self.boxes.append(goal)
 
         #generate character which must be at least some distance from the goal
@@ -637,12 +636,28 @@ class NavEnvFlat(gym.Env):
         boxes = []
         y = WINDOW_SIZE[1]
         x = WINDOW_SIZE[0]
-        thickness = 10
+        thickness = 5
         boxes.append(Box(np.array([0, 0]), np.array([thickness, y]), color=1))
         boxes.append(Box(np.array([0, 0]), np.array([x, thickness]), color=1))
         boxes.append(Box(np.array([0, y-thickness]), np.array([x, thickness]), color=1))
         boxes.append(Box(np.array([x-thickness, 0]), np.array([thickness, y]), color=1))
-        return boxes
+        
+        # manually create walls here so that we don't need to check more walls than necessary
+        # on intersections
+        walls = [
+            [[thickness, 0], [thickness, y]],
+            [[0, thickness], [x, thickness]],
+            [[0, y-thickness], [x, y-thickness]],
+            [[x-thickness, 0], [x-thickness, y]]
+        ]
+        wall_refs = [
+            boxes[0],
+            boxes[1],
+            boxes[2],
+            boxes[3]
+        ]
+        
+        return boxes, walls, wall_refs
         
     def get_walls(self, boxes):
         '''
