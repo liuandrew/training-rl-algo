@@ -32,7 +32,7 @@ def main():
     if args.exp_name is not None:
         run_name = f"{args.env_name}__{args.exp_name}__{args.seed}__{int(time.time())}"
     else:
-        run_name = f"{args.env_name}__{args.seed}__{int(time.time())}"
+        run_name = f"{args.exp_name}__{int(time.time())}"
 
     if args.track:
         import wandb
