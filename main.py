@@ -309,7 +309,7 @@ def main():
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start)), global_step)
 
         #Attempt to manually log any videos to W&B if they exist
-        if args.track and args.capture_video and 'video' in os.listdir():
+        if args.capture_video and 'video' in os.listdir():
             upload_videos()
 
         # save for every interval-th episode or for the last epoch

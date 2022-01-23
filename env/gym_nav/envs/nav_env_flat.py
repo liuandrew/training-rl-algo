@@ -553,7 +553,7 @@ class NavEnvFlat(gym.Env):
         image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
         image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         #trim borders
-        image_from_plot = image_from_plot[52:380,52:390,:]
+        # image_from_plot = image_from_plot[52:380,52:390,:]
         
         # with io.BytesIO() as buff:
         #     fig.savefig(buff, format='raw')
