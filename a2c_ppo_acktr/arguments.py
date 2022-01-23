@@ -196,6 +196,9 @@ def get_args():
     parser.add_argument('--capture-video', type=int, default=0, 
         help='whether to capture videos of the agent performances (check out `videos` folder)' + 
         ' pass an int for how often (every n episodes) the videos should be recorded')
+    parser.add_argument('--upload-video', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='if toggled, upload videos to wandb (not working on chpc)')
+
 
     #Andy: add optional save name and args for envs
     parser.add_argument('--save-name', type=str, default=None,

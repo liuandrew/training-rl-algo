@@ -105,6 +105,7 @@ runs/
 wandb/
 video/
 logs/
+saved_video/
 experiment_configs/*
 experiment_configs/archive/*
 !experiment_configs

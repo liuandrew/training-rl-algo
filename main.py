@@ -3,6 +3,7 @@ import glob
 import os
 import time
 from collections import deque
+from shutil import copyfile
 
 import gym
 import gym_nav
@@ -83,13 +84,25 @@ def main():
 
     def upload_videos():
         available = available_videos()
-        if available is not False:
-            path = available[0]
-            f = available[1]
-            wandb.log({'video': wandb.Video(path),
-                'format': 'gif'})
-            logged_videos.append(f)
-                        
+        if args.upload_video:
+            if available is not False:
+                path = available[0]
+                f = available[1]
+                wandb.log({'video': wandb.Video(path),
+                    'format': 'gif'})
+                logged_videos.append(f)
+        else:
+            save_path = 'saved_video/' + args.exp_name
+            #move videos to another folder
+            if len(logged_videos) == 0 and args.exp_name not in os.listdir('saved_video'):
+                os.mkdir(save_path)
+            if available is not False:
+                path = available[0]
+                f = available[1]
+                copyfile(path, os.path.join(save_path, f))
+                logged_videos.append(f)
+
+
 
     logged_videos = []
     writer.add_text(
@@ -333,6 +346,8 @@ def main():
     if args.track and args.capture_video and 'video' in os.listdir():
         time.sleep(5)
         upload_videos()
+
+
 
     if args.config_file_name is not None:
         write_latest_exp_complete(args.config_file_name)
