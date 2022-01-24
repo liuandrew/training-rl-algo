@@ -34,6 +34,7 @@ color_to_idx = {
 #     6: np.array([230, 230, 230])
 # }
 idx_to_rgb = {
+    0: np.array([0.6, 0.6, 0.6]),
     1: np.array([0.9, 0, 0]),
     2: np.array([0, 0.9, 0]),
     3: np.array([0, 0, 0.9]),
@@ -423,7 +424,8 @@ class NavEnvFlat(gym.Env):
                 rew_structure='dist', give_heading=0, verbose=0,
                 world_gen_func=None, world_gen_params={}, give_dist=True,
                 give_time=False, collission_penalty=0, default_reward=0,
-                sub_goal_reward=0.01, goal_visible=True):
+                sub_goal_reward=0.01, goal_visible=True, wall_colors=1,
+                task_structure=1, poster=False):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -433,6 +435,16 @@ class NavEnvFlat(gym.Env):
             using some other rules. Note that it needs to generate objects, a goal, and
             set the agent position and heading
             The character will be passed as the argument
+        wall_colors: 
+            1: red, red, red, red
+            2: red, green, red, green
+            2.5: red, red, green, green
+            4: red, green, blue, purple
+        task_structure:
+            1: visible goal, randomize position
+            2: invisible goal, fixed position
+        poster:
+            whether there should be a poster and on which wall [0-3]
         '''
         super(NavEnvFlat, self).__init__()
 
@@ -444,10 +456,14 @@ class NavEnvFlat(gym.Env):
         self.default_reward = default_reward
         self.sub_goal_reward = sub_goal_reward
         self.rew_structure = rew_structure
+        self.task_structure = task_structure
         self.verbose = verbose
         self.world_gen_func = world_gen_func
         self.world_gen_params = world_gen_params
-        self.goal_visible = goal_visible
+        self.wall_colors = wall_colors
+        self.goal_visible = goal_visible # Note: not used, visibility defined by
+                                         # task structure at the moment
+        self.poster = poster
 
         observation_width = num_rays
         if give_dist:
@@ -609,17 +625,29 @@ class NavEnvFlat(gym.Env):
     def generate_world(self):
         self.boxes, walls, wall_refs = self.make_walls()
 
-        #generate a goal
-        corner = np.random.uniform(low=30, high=270, size=(2,))
-        goal = Box(corner, [20, 20], color=6, is_goal=True)
-        goal_walls, goal_wall_refs = self.get_walls([goal])
-        if self.goal_visible:
+        if self.task_structure == 1:
+            #generate a visible goal with random position
+            corner = np.random.uniform(low=30, high=270, size=(2,))
+            goal = Box(corner, [20, 20], color=6, is_goal=True)
+            goal_walls, goal_wall_refs = self.get_walls([goal])
             self.vis_walls, self.vis_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
             self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
-        else:
+            self.boxes.append(goal)
+
+            # if self.goal_visible:
+            #     self.vis_walls, self.vis_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            #     self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            # else:
+            #     self.vis_walls, self.vis_wall_refs = walls, wall_refs
+            #     self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            # self.boxes.append(goal)
+        elif self.task_structure == 2:
+            corner = np.array([240, 60])
+            goal = Box(corner, [20, 20], color=0, is_goal=True)            
+            goal_walls, goal_wall_refs = self.get_walls([goal])
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
             self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
-        self.boxes.append(goal)
+            self.boxes.append(goal)
 
         #generate character which must be at least some distance from the goal
         searching = True
@@ -637,11 +665,30 @@ class NavEnvFlat(gym.Env):
         y = WINDOW_SIZE[1]
         x = WINDOW_SIZE[0]
         thickness = 5
-        boxes.append(Box(np.array([0, 0]), np.array([thickness, y]), color=1))
-        boxes.append(Box(np.array([0, 0]), np.array([x, thickness]), color=1))
-        boxes.append(Box(np.array([0, y-thickness]), np.array([x, thickness]), color=1))
-        boxes.append(Box(np.array([x-thickness, 0]), np.array([thickness, y]), color=1))
+
+        walls = []
+        if self.wall_colors == 1:
+            walls = ['red', 'red', 'red', 'red']
+        elif self.wall_colors == 2:
+            walls = ['red', 'green', 'red', 'green']
+        elif self.wall_colors == 2.5:
+            walls = ['red', 'red', 'green', 'green']
+        elif self.wall_colors == 3:
+            walls = ['red', 'green', 'red', 'blue']
+        elif self.wall_colors == 3.5:
+            walls = ['red', 'red', 'green', 'blue']
+        elif self.wall_colors == 4:
+            walls = ['red', 'green', 'blue', 'purple']
+        wall_colors = [color_to_idx[color] for color in walls]
+
+
+        boxes.append(Box(np.array([0, 0]), np.array([thickness, y]), color=wall_colors[2]))
+        boxes.append(Box(np.array([0, 0]), np.array([x, thickness]), color=wall_colors[3]))
+        boxes.append(Box(np.array([0, y-thickness]), np.array([x, thickness]), color=wall_colors[1]))
+        boxes.append(Box(np.array([x-thickness, 0]), np.array([thickness, y]), color=wall_colors[0]))
         
+
+
         # manually create walls here so that we don't need to check more walls than necessary
         # on intersections
         walls = [
@@ -656,6 +703,35 @@ class NavEnvFlat(gym.Env):
             boxes[2],
             boxes[3]
         ]
+
+
+        # add poster
+        if self.poster is not False:
+            p_thickness = thickness + 1
+            p_length = 50
+            p_half = 25
+            midpoint = 300 / 2
+            color = color_to_idx['yellow']
+            if self.poster == 0:
+                boxes.append(Box(np.array([x-p_thickness, midpoint-p_half]),
+                                 np.array([p_thickness, p_length]), color=color))
+                intersect = [[x-p_thickness, midpoint-p_half], [x-p_thickness, midpoint+p_half]]
+            elif self.poster == 1:
+                boxes.append(Box(np.array([midpoint-p_half, y-p_thickness]),
+                                 np.array([p_length, p_thickness]), color=color))
+                intersect = [[midpoint-p_half, y-p_thickness], [midpoint+p_half, y-p_thickness]]
+            elif self.poster == 2:
+                boxes.append(Box(np.array([0, midpoint-p_half]),
+                                 np.array([p_thickness, p_length]), color=color))
+                intersect = [[p_thickness, midpoint-p_half], [p_thickness, midpoint+p_half]]
+            elif self.poster == 3:
+                boxes.append(Box(np.array([midpoint-p_half, 0]),
+                                 np.array([p_length, p_thickness]), color=color))
+                intersect = [[midpoint-p_half, p_thickness], [midpoint+p_half, p_thickness]]
+
+            walls.append(intersect)
+            wall_refs.append(boxes[4])
+
         
         return boxes, walls, wall_refs
         
@@ -673,4 +749,3 @@ class NavEnvFlat(gym.Env):
 
     def seed(self, seed=0):
         np.random.seed(seed)
-    
