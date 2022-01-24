@@ -670,4 +670,7 @@ class NavEnvFlat(gym.Env):
             wall_refs = wall_refs + [box] * 4
         return walls, wall_refs
 
+
+    def seed(self, seed=0):
+        np.random.seed(seed)
     

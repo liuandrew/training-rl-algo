@@ -7,7 +7,7 @@ from a2c_ppo_acktr.envs import make_vec_envs
 
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
              device, ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
-             num_episodes=10):
+             num_episodes=10, verbose=False):
     '''
     ret_info: level of info that should be tracked and returned
     capture_video: whether video should be captured for episodes
@@ -75,12 +75,19 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         all_hidden_states.append(eval_recurrent_hidden_states)
         all_dones.append(done)
 
-        data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
-            obs, action, reward, data)
+        if data_callback is not None:
+            data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
+                obs, action, reward, data)
+        else:
+            data = {}
 
         for info in infos:
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
+                #Andy: add verbosity option
+                if verbose:
+                    print('ep ' + str(len(eval_episode_rewards)) + ' rew ' + \
+                        str(info['episode']['r']))
 
     # eval_envs.close()
 

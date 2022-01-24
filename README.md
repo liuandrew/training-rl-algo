@@ -22,6 +22,14 @@ In each of the files, you can search "Andy:" for places where the original code 
 
 In the write_and_test folder, I am working on code to either set up experiments, make plots, or test code. These are mostly handled in Jupyter notebooks
 
+## Code Flow Notes
+
+To generate a model, main.py creates a 
+
+Policy (model.py)
+* Uses MLPBase if observation is 1-dim, CNNBase if 3-dim
+MLPBase
+* Two separate 
 
 
 ## Update (April 12th, 2021)
