@@ -141,6 +141,24 @@ def main():
     else:
         save_path = os.path.join(save_path, args.env_name)
 
+
+    # Andy: generate path for saving checkpoints
+    if args.checkpoint_interval > 0:
+        checkpoint_path = os.path.join(args.save_dir, 'checkpoint')
+        try:
+            os.makedirs(checkpoint_path)
+        except OSError:
+            pass
+
+        # Generate sub-directory with experiment name
+        checkpoint_path = os.path.join(checkpoint_path, args.exp_name)
+        try:
+            os.makedirs(checkpoint_path)
+        except OSError:
+            pass
+
+
+
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
@@ -149,7 +167,7 @@ def main():
                          env_kwargs=args.env_kwargs)
 
     loaded_model = False
-    print(args.cont)
+    # print(args.cont)
     if args.cont:
         loaded_model = True
         actor_critic, obs_rms = torch.load(save_path)
@@ -219,7 +237,7 @@ def main():
         global_step = int(obs_rms.count)
     else:
         global_step = 0
-    print(global_step)
+    # print(global_step)
     num_updates = int(
         args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(num_updates):
@@ -321,6 +339,13 @@ def main():
                 actor_critic,
                 getattr(utils.get_vec_normalize(envs), 'obs_rms', None)
             ], save_path)
+
+        # Andy: if checkpointing, save every interval-th episode
+        if args.checkpoint_interval > 0 and (j % args.checkpoint_interval == 0 or j == num_updates - 1):
+            torch.save([
+                actor_critic,
+                getattr(utils.get_vec_normalize(envs), 'obs_rms', None)
+            ], os.path.join(checkpoint_path, str(j) + '.pt'))
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps

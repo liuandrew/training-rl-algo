@@ -11,12 +11,14 @@ Here I will be making some slight adjustments to code to make it nicer to track 
 In each of the files, you can search "Andy:" for places where the original code was changed.
 
 * main.py: add Tensorboard and log every update
-  * change
-* a2c_ppo/arguments.py: add flags for tracking and video capture. 
+  * also add optionality to using wandb (stopped working on CHPC)
+  * add optionality to save checkpoints
+* a2c_ppo/arguments.py: add flags for tracking and video capture and checkpointing and using specific kwargs
 * a2c_ppo/algo/ppo.py: add calculations for approx kl divergence and clipfracs
-* a2c_ppo/envs.py: add video capture wrapper to environments
+* a2c_ppo/envs.py: add video capture wrapper to environments, ability to use env_kwargs
 
 * evaluate.py: adding code to return all seen obs and actions during evaluation, as well as hidden states so that we could potentitally map out hidden state trajectories. Adding code to take an optional callback to gather additional data from environment, and option to select how many episodes
+  * added ability to use to record video and verbosity for printing individual episode results
 
 ### Research Work
 

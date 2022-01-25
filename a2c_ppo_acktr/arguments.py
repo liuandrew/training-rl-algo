@@ -217,6 +217,11 @@ def get_args():
     parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
 
+    #add options to save model checkpoints
+    parser.add_argument('--checkpoint-interval', type=int, default=5000,
+        help='number of updates before a checkpoint of the model should be saved, ' + \
+        'if 0, then no checkpoints will be saved')
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
