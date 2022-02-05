@@ -24,6 +24,9 @@ class Policy(nn.Module):
                 base = MLPBase
             else:
                 raise NotImplementedError
+        elif type(base) == str:
+            #Attempt to find a base class with the given string
+            base = globals()[base]
 
         self.base = base(obs_shape[0], **base_kwargs)
 
@@ -227,3 +230,104 @@ class MLPBase(NNBase):
         hidden_actor = self.actor(x)
 
         return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
+
+
+
+
+
+
+#Andy: Add FlexBase currently for allowing shared layers between
+# actor and critic
+class FlexBase(NNBase):
+    '''
+    NN module that allows for shared actor and critic layers as well
+    as varying number of output heads
+    
+    num_layers: how many hidden MLP layers from input (or from GRU) to output heads
+    num_shared_layers: how many of these MLP layers should be shared between actor and critic 
+        -1 means all layers should be shared
+    '''
+    def __init__(self, num_inputs, recurrent=True, hidden_size=64,
+                num_layers=2, num_shared_layers=-1):
+        super(FlexBase, self).__init__(recurrent, num_inputs, hidden_size)
+        
+        print('Using FlexBase')
+        print('num shared layers is ' + str(num_shared_layers))
+
+        if recurrent:
+            num_inputs = hidden_size
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), np.sqrt(2))
+        
+        shared_layers = []
+        critic_layers = []
+        actor_layers = []
+        
+        # generate all the shared layers
+        cur_shared_layers = 0
+        in_dim = num_inputs
+        for i in range(num_layers):
+            if num_shared_layers == -1 or cur_shared_layers < num_shared_layers:
+                shared_layers.append(init_(nn.Linear(in_dim, hidden_size)))
+                shared_layers.append(nn.Tanh())
+                in_dim = hidden_size # only first layer with have input size num_inputs
+                cur_shared_layers += 1
+        
+        # generate the non-shared layers
+        if num_shared_layers != -1:
+            remaining_layers = num_layers - num_shared_layers
+        else:
+            remaining_layers = 0
+        
+        for i in range(remaining_layers):
+            critic_layers.append(init_(nn.Linear(in_dim, hidden_size)))
+            critic_layers.append(nn.Tanh())
+            actor_layers.append(init_(nn.Linear(in_dim, hidden_size)))
+            actor_layers.append(nn.Tanh())
+            in_dim = hidden_size # only first layer with have input size num_inputs
+            
+        # finally create the critic linear output
+        critic_layers.append(init_(nn.Linear(in_dim, 1)))
+        
+        if len(shared_layers) > 0:
+            self.shared_layers = nn.Sequential(*shared_layers)
+        else:
+            self.shared_layers = None
+        
+        if len(actor_layers) > 0:
+            self.actor_layers = nn.Sequential(*actor_layers)
+        else:
+            self.actor_layers = None
+            
+        if len(critic_layers) > 0:
+            self.critic_layers = nn.Sequential(*critic_layers)
+        else:
+            self.critic_layers = None
+            
+        self.train()
+            
+    def forward(self, inputs, rnn_hxs, masks):
+        x = inputs
+        
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+        
+        if self.shared_layers:
+            x = self.shared_layers(x)
+            
+        if self.actor_layers:
+            hidden_actor = self.actor_layers(x)
+        else:
+            # if all layers are shared between actor and critic,
+            # the last output of shared layers will be x
+            # which will be used by the dist function in Policy (model.py)
+            hidden_actor = x
+            
+        if self.critic_layers:
+            # this should always run since we will output the critic evaluation here
+            critic_val = self.critic_layers(x)
+        else:
+            raise Exception('Something mysterious happened... there was no final critic head')
+        
+        return critic_val, hidden_actor, rnn_hxs

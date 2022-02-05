@@ -210,18 +210,23 @@ def get_args():
     parser.add_argument('--config-file-name', type=str, default=None,
         help='this is used specifically for automatic scheduler to determine ' + \
         'what experiment to write as being done once successfully completed')
-    # parser.add_argument('--env-kwargs', type=json.loads, default=None,
+    #Andy: parser.add_argument('--env-kwargs', type=json.loads, default=None,
     #     help='pass kwargs for environment given as json string')
     parser.add_argument('--env-kwargs', nargs='*', action=ParseKwargs, default=None)
 
     parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
 
-    #add options to save model checkpoints
+    #Andy: add options to save model checkpoints
     parser.add_argument('--checkpoint-interval', type=int, default=5000,
         help='number of updates before a checkpoint of the model should be saved, ' + \
         'if 0, then no checkpoints will be saved')
 
+    #Andy: add options for using a custom NN base for policy
+    parser.add_argument('--nn-base', type=str, default=None,
+        help='pass a string to use a specific NNBase from model.py, e.g. FlexBase')
+    parser.add_argument('--nn-base-kwargs', nargs='*', action=ParseKwargs, default=None,
+        help='pass kwargs for the NNBase, such as how many shared layers')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
