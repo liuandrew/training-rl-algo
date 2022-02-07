@@ -225,7 +225,8 @@ def main():
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                               envs.observation_space.shape, envs.action_space,
-                              actor_critic.recurrent_hidden_state_size)
+                              actor_critic.recurrent_hidden_state_size,
+                              actor_critic.auxiliary_output_size)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -255,9 +256,11 @@ def main():
             global_step += 1 * args.num_processes
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+
+                value, action, action_log_prob, recurrent_hidden_states, auxiliary_outputs = \
+                actor_critic.act(rollouts.obs[step], rollouts.recurrent_hidden_states[step],
                     rollouts.masks[step])
+
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
@@ -281,7 +284,8 @@ def main():
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])
             rollouts.insert(obs, recurrent_hidden_states, action,
-                            action_log_prob, value, reward, masks, bad_masks)
+                            action_log_prob, value, reward, masks, bad_masks,
+                            auxiliary_outputs)
 
         with torch.no_grad():
             next_value = actor_critic.get_value(

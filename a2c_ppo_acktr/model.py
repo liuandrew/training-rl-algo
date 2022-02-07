@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import gym
 
 from a2c_ppo_acktr.distributions import Bernoulli, Categorical, DiagGaussian
 from a2c_ppo_acktr.utils import init
@@ -51,11 +52,33 @@ class Policy(nn.Module):
         """Size of rnn_hx."""
         return self.base.recurrent_hidden_state_size
 
+    #Andy: add auxiliary check
+    @property
+    def has_auxiliary(self):
+        return self.base.has_auxiliary
+
+    @property
+    def auxiliary_output_size(self):
+        if self.base.has_auxiliary:
+            return self.base.auxiliary_output_size
+        else:
+            return 1
+    
+    
+
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        if self.base.has_auxiliary:
+            value, actor_features, rnn_hxs, auxiliary = \
+                self.base(inputs, rnn_hxs, masks, deterministic)
+        else:
+            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+            # if no auxiliary output, storage will expect an output 0
+            # with shape the same as value
+            auxiliary = torch.zeros(value.shape)
+
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -66,20 +89,27 @@ class Policy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action, action_log_probs, rnn_hxs
+        return value, action, action_log_probs, rnn_hxs, auxiliary
 
     def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+        outputs = self.base(inputs, rnn_hxs, masks)
+        value = outputs[0]
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        if self.base.has_auxiliary:
+            value, actor_features, rnn_hxs, auxiliary = \
+                self.base(inputs, rnn_hxs, masks)
+        else:
+            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+            auxiliary = torch.zeros(value.shape)
+
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action_log_probs, dist_entropy, rnn_hxs
+        return value, action_log_probs, dist_entropy, rnn_hxs, auxiliary
 
 
 class NNBase(nn.Module):
@@ -88,6 +118,9 @@ class NNBase(nn.Module):
 
         self._hidden_size = hidden_size
         self._recurrent = recurrent
+        #Andy: default the NNBase to having no auxiliary outputs
+        self.has_auxiliary = False 
+        self.auxiliary_output_size = 0
 
         if recurrent:
             self.gru = nn.GRU(recurrent_input_size, hidden_size)
@@ -238,7 +271,7 @@ class MLPBase(NNBase):
 
 #Andy: Add FlexBase currently for allowing shared layers between
 # actor and critic
-class FlexBase(NNBase):
+class FlexBaseOld(NNBase):
     '''
     NN module that allows for shared actor and critic layers as well
     as varying number of output heads
@@ -249,7 +282,7 @@ class FlexBase(NNBase):
     '''
     def __init__(self, num_inputs, recurrent=True, hidden_size=64,
                 num_layers=2, num_shared_layers=-1):
-        super(FlexBase, self).__init__(recurrent, num_inputs, hidden_size)
+        super(FlexBaseOld, self).__init__(recurrent, num_inputs, hidden_size)
         
         print('Using FlexBase')
         print('num shared layers is ' + str(num_shared_layers))
@@ -331,3 +364,236 @@ class FlexBase(NNBase):
             raise Exception('Something mysterious happened... there was no final critic head')
         
         return critic_val, hidden_actor, rnn_hxs
+
+
+
+
+
+# To totally customize where auxiliary tasks are attached, lets split up the shared layers
+# into individually activatable (self.shared_layers becomes a list of nn.Sequentials) ones
+class FlexBase(NNBase):
+    '''
+    NN module that allows for shared actor and critic layers as well
+    as varying number of output heads
+    
+    num_layers: how many hidden MLP layers from input (or from GRU) to output heads
+    num_shared_layers: how many of these MLP layers should be shared between actor and critic 
+        -1 means all layers should be shared
+        
+    Auxiliary Tasks:
+    To add auxiliary heads, we will choose which layers each auxiliary head will be attached to
+    For each auxiliary task we need:
+        * Depth of layer to attach
+        * Whether to attach to actor or critic side
+        * Type of output (here we can use Gym spaces and distributions as the Policy does, or linear output)
+    Thus each entry to auxiliary_heads should be
+        [(depth: -1 is last, 1 is after first layer (1. recurrent layer, 2. hidden, etc.),
+          side: 0:actor or 1:critic, -1: if we expect to be on shared layers
+          output: gym.spaces.Discrete, gym.spaces.Box, or int representing output dimension for linear output)]
+        
+
+    !IMPORTANT - to use Gym distributions and such, we will need to adjust code further
+        specifically looking into allowing to pass the predicted outputs in 
+        evaluate_actions in Policy from PPO algorithm, and getting log_probs
+        to get loss from. Linear loss is easier to code in so this is what we
+        will focus on for now
+        In other words, Distributions are not ready to be used as auxiliary
+        tasks yet
+    '''
+    def __init__(self, num_inputs, recurrent=True, hidden_size=64,
+                num_layers=2, num_shared_layers=-1, auxiliary_heads=[]):
+        super(FlexBase, self).__init__(recurrent, num_inputs, hidden_size)
+        
+        self.num_layers = num_layers
+        self.auxiliary_heads = auxiliary_heads
+        self.has_auxiliary = True
+
+        if recurrent:
+            num_inputs = hidden_size
+            self.num_layers += 1
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), np.sqrt(2))
+        
+        shared_layers = []
+        critic_layers = []
+        actor_layers = []
+        
+        self.shared_layers = []
+        self.critic_layers = []
+        self.actor_layers = []
+        
+        # generate all the shared layers
+        cur_shared_layers = 0
+        in_dim = num_inputs
+        for i in range(num_layers):
+            if num_shared_layers == -1 or cur_shared_layers < num_shared_layers:
+                setattr(self, 'shared'+str(i), nn.Sequential(
+                    init_(nn.Linear(in_dim, hidden_size)),
+                    nn.Tanh()
+                ))
+                self.shared_layers.append(getattr(self, 'shared'+str(i)))
+                in_dim = hidden_size # only first layer with have input size num_inputs
+                cur_shared_layers += 1
+        
+        # generate the non-shared layers
+        if num_shared_layers != -1:
+            remaining_layers = num_layers - num_shared_layers
+        else:
+            remaining_layers = 0
+        
+        for i in range(remaining_layers):            
+            setattr(self, 'critic'+str(i), nn.Sequential(
+                init_(nn.Linear(in_dim, hidden_size)),
+                nn.Tanh()
+            ))
+            setattr(self, 'actor'+str(i), nn.Sequential(
+                init_(nn.Linear(in_dim, hidden_size)),
+                nn.Tanh()
+            ))
+            
+            self.critic_layers.append(getattr(self, 'critic'+str(i)))
+            self.actor_layers.append(getattr(self, 'actor'+str(i)))
+
+            in_dim = hidden_size # only first layer with have input size num_inputs
+            
+        # finally create the critic linear output
+#         critic_layers.append(init_(nn.Linear(in_dim, 1)))
+        self.critic_head = init_(nn.Linear(in_dim, 1))
+        self.critic_layers.append(self.critic_head)
+        
+            
+        self.auxiliary_layers = []
+        self.auxiliary_output_idxs = [] # indexes for generating auxiliary outputs
+        self.auxiliary_layer_types = [] # 0 linear, 1 distribution
+        self.auxiliary_output_size = 0
+        # generate auxiliary outputs
+        current_auxiliary_output_idx = 0
+        for i, head in enumerate(auxiliary_heads):
+            depth = head[0]
+            if depth == -1:
+                depth = self.num_layers
+            side = head[1]
+            output_type = head[2]
+            self.auxiliary_output_idxs.append(current_auxiliary_output_idx)
+            if depth == 0:
+                raise Exception('Auxiliary task requesting depth of 0')
+            if depth > self.num_layers:
+                raise Exception('Auxiliary task requesting depth greater than exists in network (head[0])')
+            if side > 1:
+                raise Exception('Auxiliary task requesting side that is not 0 (actor) or 1 (critic)')
+            total_shared_layers = num_shared_layers
+            if recurrent: 
+                total_shared_layers += 1
+
+            if side == -1:
+                if depth > total_shared_layers:
+                    raise Exception('Auxiliary task expects to be on shared layers, but is assigned to layers past shared')
+            else:
+                if depth <= total_shared_layers:
+                    raise Exception('Auxiliary task expects to be on individual layers, but is assigned to shared depth')
+            
+            if type(output_type) == int:
+                # linear output
+                layer = init_(nn.Linear(hidden_size, output_type))
+                self.auxiliary_output_size += output_type
+                self.auxiliary_layer_types.append(0)
+                current_auxiliary_output_idx += output_type
+            elif hasattr(output_type, '__class__'):
+                # output based on gym space
+                # code taken from Policy to implement a dist function
+                if output_type.__class__.__name__ == "Discrete":
+                    num_outputs = output_type.n
+                    layer = Categorical(hidden_size, num_outputs)
+                    num_outputs = 1
+                elif output_type.__class__.__name__ == "Box":
+                    num_outputs = output_type.shape[0]
+                    layer = DiagGaussian(hidden_size, num_outputs)
+                elif output_type.__class__.__name__ == "MultiBinary":
+                    num_outputs = output_type.shape[0]
+                    layer = Bernoulli(hidden_size, num_outputs)
+                else:
+                    raise NotImplementedError
+                self.auxiliary_output_size += num_outputs
+                self.auxiliary_layer_types.append(1)
+                current_auxiliary_output_idx += num_outputs
+                
+            setattr(self, 'auxiliary'+str(i), layer)
+            self.auxiliary_layers.append(getattr(self, 'auxiliary'+str(i)))
+        
+        if self.auxiliary_output_size == 0:
+            self.auxiliary_output_size = 1
+        self.train()
+            
+    def forward(self, inputs, rnn_hxs, masks, deterministic=False):
+        current_layer = 0
+        shared_layer_idx = 0
+        individual_layer_idx = 0
+        on_shared_layers = True
+        auxiliary_outputs = torch.zeros((inputs.shape[0], self.auxiliary_output_size))
+        x = inputs
+        
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            current_layer += 1
+        
+        actor_x = x
+        critic_x = x
+        
+        for i in range(current_layer, self.num_layers+1):
+            # iterate through the layers whether shared or individual actor/critic
+            # print(i)
+            # first check if any auxiliary tasks have the current depth
+            for j, head in enumerate(self.auxiliary_heads):
+                # depth = head[0]
+                # side = head[1]
+                depth = head[0]
+                if depth == -1:
+                    depth = self.num_layers
+                if depth == current_layer:
+                    # print('Calling auxiliary head at depth {}'.format(i))
+                    # figure out if we are on shared layer
+                    if on_shared_layers:
+                        auxiliary_input = x
+                    elif head[1] == 0:
+                        auxiliary_input = actor_x
+                    elif head[1] == 1:
+                        auxiliary_input = critic_x
+                    
+                    # convert to output of auxiliary head
+                    auxiliary_output = self.auxiliary_layers[j](auxiliary_input)
+                    if self.auxiliary_layer_types[j] == 1:
+                        if deterministic:
+                            auxiliary_output = auxiliary_output.mode()
+                        else:
+                            auxiliary_output = auxiliary_output.sample()
+                    size = auxiliary_output.shape[1]
+                    start_idx = self.auxiliary_output_idxs[j]
+                    auxiliary_outputs[:, start_idx:start_idx+size] = auxiliary_output
+            
+            # continue proceding through layers
+            # check if we still have shared layers to complete
+            if len(self.shared_layers) > 0 and shared_layer_idx < len(self.shared_layers):
+                x = self.shared_layers[shared_layer_idx](x)
+                # print('Calling shared layer {}'.format(shared_layer_idx))
+                shared_layer_idx += 1
+                # if shared layers are done, this will set actor_x and critic_x
+                actor_x = x
+                critic_x = x
+            elif len(self.actor_layers) > 0 and individual_layer_idx < len(self.actor_layers):
+                # no more shared layers - move to actor critic layers
+                on_shared_layers = False
+                # print('Calling actor critic layer {}'.format(individual_layer_idx))
+                actor_x = self.actor_layers[individual_layer_idx](actor_x)
+                critic_x = self.critic_layers[individual_layer_idx](critic_x)
+                individual_layer_idx += 1
+                
+            current_layer += 1
+                    
+                    
+        # Finally get critic value estimation
+        critic_val = self.critic_layers[-1](critic_x)
+                    
+        
+        return critic_val, actor_x, rnn_hxs, auxiliary_outputs
+        
