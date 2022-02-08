@@ -523,6 +523,7 @@ class FlexBase(NNBase):
         
         if self.auxiliary_output_size == 0:
             self.auxiliary_output_size = 1
+            self.has_auxiliary = False
         self.train()
             
     def forward(self, inputs, rnn_hxs, masks, deterministic=False):
@@ -594,6 +595,8 @@ class FlexBase(NNBase):
         # Finally get critic value estimation
         critic_val = self.critic_layers[-1](critic_x)
                     
-        
-        return critic_val, actor_x, rnn_hxs, auxiliary_preds
+        if self.has_auxiliary:
+            return critic_val, actor_x, rnn_hxs, auxiliary_preds
+        else:
+            return critic_val, actor_x, rnn_hxs
         

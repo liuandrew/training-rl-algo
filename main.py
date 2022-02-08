@@ -269,7 +269,8 @@ def main():
             auxiliary_truths = []
             for info in infos:
                 if 'auxiliary' in info:
-                    auxiliary_truths.append(info['auxiliary'])
+                    if len(info['auxiliary'] > 0):
+                        auxiliary_truths.append(info['auxiliary'])
             if len(auxiliary_truths) > 0:
                 auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
             else:
@@ -284,7 +285,6 @@ def main():
                         global_step)
                     writer.add_scalar("charts/episodic_length", info["episode"]["l"], 
                         global_step)
-
 
 
             # If done then clean the history of observations.
