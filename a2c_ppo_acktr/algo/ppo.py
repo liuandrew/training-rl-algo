@@ -12,6 +12,7 @@ class PPO():
                  num_mini_batch,
                  value_loss_coef,
                  entropy_coef,
+                 auxiliary_loss_coef=0,
                  lr=None,
                  eps=None,
                  max_grad_norm=None,
@@ -25,6 +26,7 @@ class PPO():
 
         self.value_loss_coef = value_loss_coef
         self.entropy_coef = entropy_coef
+        self.auxiliary_loss_coef = auxiliary_loss_coef
 
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
@@ -39,6 +41,7 @@ class PPO():
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        auxiliary_loss_epoch = 0
 
         clipfracs = []
         explained_vars = []
@@ -53,10 +56,10 @@ class PPO():
             for sample in data_generator:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
                    value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
-                    auxiliary_batch, adv_targ = sample
+                    adv_targ, auxiliary_pred_batch, auxiliary_truth_batch = sample
 
                 # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy, _, _ = self.actor_critic.evaluate_actions(
+                values, action_log_probs, dist_entropy, _, auxiliary_preds = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch,
                     actions_batch)
 
@@ -86,8 +89,16 @@ class PPO():
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
                 
+                if self.actor_critic.has_auxiliary:
+                    auxiliary_loss = 0.5 * (auxiliary_truth_batch - auxiliary_preds).pow(2).mean()
+                else:
+                    auxiliary_loss = torch.zeros(1)
+
+
+
                 self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
+                (value_loss * self.value_loss_coef + action_loss + 
+                 auxiliary_loss * self.auxiliary_loss_coef -
                  dist_entropy * self.entropy_coef).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
@@ -96,6 +107,7 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                auxiliary_loss_epoch += auxiliary_loss.item()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
@@ -106,4 +118,4 @@ class PPO():
 
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, \
-            approx_kl, clipfracs
+            approx_kl, clipfracs, auxiliary_loss_epoch

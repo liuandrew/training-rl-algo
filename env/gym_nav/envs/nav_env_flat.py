@@ -6,6 +6,12 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import matplotlib.pyplot as plt
 import io
 
+
+'''
+This is the environment currently used for continuous MWM task
+
+'''
+
 MAX_MARCH = 20
 EPSILON = 0.1
 DEG_TO_RAD = 0.0174533
@@ -425,7 +431,7 @@ class NavEnvFlat(gym.Env):
                 world_gen_func=None, world_gen_params={}, give_dist=True,
                 give_time=False, collission_penalty=0, default_reward=0,
                 sub_goal_reward=0.01, goal_visible=True, wall_colors=1,
-                task_structure=1, poster=False):
+                task_structure=1, poster=False, auxiliary_tasks=[]):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -445,9 +451,19 @@ class NavEnvFlat(gym.Env):
             2: invisible goal, fixed position
         poster:
             whether there should be a poster and on which wall [0-3]
+        auxiliary_tasks: (pass as list of tasks desired)
+            'euclidean_start': euclidean distance travelled from start of episode
         '''
         super(NavEnvFlat, self).__init__()
 
+        #this gives the auxiliary tasks available and dimension of output
+        available_auxiliary_tasks = {
+            'euclidean_start': 1
+        }
+        auxiliary_task_to_idx = {
+            'euclidean_start': 0
+        }
+        
         self.total_rewards = 0
         self.give_dist = give_dist
         self.give_heading = give_heading
@@ -480,6 +496,7 @@ class NavEnvFlat(gym.Env):
         self.current_steps = 0
         
         self.character = Character()
+        self.initial_character_position = self.character.pos.copy()
         self.num_objects = num_objects
         
         self.fig = None
@@ -495,6 +512,11 @@ class NavEnvFlat(gym.Env):
         else:
             self.world_gen_func(self.character, **self.world_gen_params)
         
+        for task in auxiliary_tasks:
+            if task not in available_auxiliary_tasks.keys():
+                raise NotImplementedError('Auxiliary task {} not found. Available options are '.format(
+                    task, ', '.join(available_auxiliary_tasks.keys())))
+        self.auxiliary_tasks = [auxiliary_task_to_idx[task] for task in auxiliary_tasks]
         
     def step(self, action):
         reward = self.default_reward
@@ -531,6 +553,8 @@ class NavEnvFlat(gym.Env):
         
         
         observation = self.get_observation()
+        auxiliary_output = self.get_auxiliary_output()
+        info['auxiliary'] = auxiliary_output
         
         if self.current_steps > self.max_steps:
             done = True
@@ -550,6 +574,7 @@ class NavEnvFlat(gym.Env):
         
         self.character.update_rays(self.vis_walls, self.vis_wall_refs)
         observation = self.get_observation()
+        self.initial_character_position = self.character.pos.copy()
         self.current_steps = 0
         self.total_rewards = 0
         return observation
@@ -620,6 +645,22 @@ class NavEnvFlat(gym.Env):
                 obs = obs[:self.num_rays]
 
             return np.array(self.character.ray_obs().reshape(-1), dtype='float')
+        
+    def get_auxiliary_output(self):
+        '''Return the auxiliary output dependent on what tasks are being measured'''
+                
+        auxiliary_output = []
+        
+        for task in self.auxiliary_tasks:
+            #euclidean distance from start task (normalized)
+            if task == 0:
+                euclid_dist_start = dist(self.character.pos - self.initial_character_position)
+                euclid_dist_start = euclid_dist_start / MAX_LEN
+                output = [euclid_dist_start]
+                auxiliary_output += output
+        
+        return np.array(auxiliary_output)
+    
         
 
     def generate_world(self):

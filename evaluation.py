@@ -62,8 +62,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
                 deterministic=True)
 
         # Obser reward and next obs
-        obs, reward, done, infos = eval_envs.step(action)
-
+        obs, reward, done, infos = envs.step(action)
+        
         eval_masks = torch.tensor(
             [[0.0] if done_ else [1.0] for done_ in done],
             dtype=torch.float32,

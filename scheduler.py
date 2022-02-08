@@ -33,7 +33,7 @@ def convert_config_to_command(file, python3=False, cont=False):
             run_string = run_string + '--' + key.replace('_', '-') + ' '
             add_str = ''
             for key2 in config[key]:
-                add_str += key2 + '=' + str(config[key][key2]) + ' '
+                add_str += key2 + '=' + str(config[key][key2]).replace(' ', '') + ' '
             run_string = run_string + add_str
         else:
             run_string = run_string + '--' + key.replace('_', '-')  + ' ' + str(config[key]) + ' '

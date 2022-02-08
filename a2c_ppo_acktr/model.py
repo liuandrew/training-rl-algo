@@ -530,7 +530,7 @@ class FlexBase(NNBase):
         shared_layer_idx = 0
         individual_layer_idx = 0
         on_shared_layers = True
-        auxiliary_outputs = torch.zeros((inputs.shape[0], self.auxiliary_output_size))
+        auxiliary_preds = torch.zeros((inputs.shape[0], self.auxiliary_output_size))
         x = inputs
         
         if self.is_recurrent:
@@ -569,7 +569,7 @@ class FlexBase(NNBase):
                             auxiliary_output = auxiliary_output.sample()
                     size = auxiliary_output.shape[1]
                     start_idx = self.auxiliary_output_idxs[j]
-                    auxiliary_outputs[:, start_idx:start_idx+size] = auxiliary_output
+                    auxiliary_preds[:, start_idx:start_idx+size] = auxiliary_output
             
             # continue proceding through layers
             # check if we still have shared layers to complete
@@ -595,5 +595,5 @@ class FlexBase(NNBase):
         critic_val = self.critic_layers[-1](critic_x)
                     
         
-        return critic_val, actor_x, rnn_hxs, auxiliary_outputs
+        return critic_val, actor_x, rnn_hxs, auxiliary_preds
         

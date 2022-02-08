@@ -198,6 +198,7 @@ def main():
             args.num_mini_batch,
             args.value_loss_coef,
             args.entropy_coef,
+            args.auxiliary_loss_coef,
             lr=args.lr,
             eps=args.eps,
             max_grad_norm=args.max_grad_norm)
@@ -257,13 +258,22 @@ def main():
             # Sample actions
             with torch.no_grad():
 
-                value, action, action_log_prob, recurrent_hidden_states, auxiliary_outputs = \
+                value, action, action_log_prob, recurrent_hidden_states, auxiliary_preds = \
                 actor_critic.act(rollouts.obs[step], rollouts.recurrent_hidden_states[step],
                     rollouts.masks[step])
 
 
             # Obser reward and next obs
+            # obs, reward, done, infos = envs.step(action)
             obs, reward, done, infos = envs.step(action)
+            auxiliary_truths = []
+            for info in infos:
+                if 'auxiliary' in info:
+                    auxiliary_truths.append(info['auxiliary'])
+            if len(auxiliary_truths) > 0:
+                auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
+            else:
+                auxiliary_truths = None
 
             for info in infos:
                 if 'episode' in info.keys():
@@ -285,7 +295,7 @@ def main():
                  for info in infos])
             rollouts.insert(obs, recurrent_hidden_states, action,
                             action_log_prob, value, reward, masks, bad_masks,
-                            auxiliary_outputs)
+                            auxiliary_preds, auxiliary_truths)
 
         with torch.no_grad():
             next_value = actor_critic.get_value(
@@ -312,8 +322,8 @@ def main():
                                  args.gae_lambda, args.use_proper_time_limits)
 
         if args.algo == 'ppo':
-            value_loss, action_loss, dist_entropy, approx_kl, clipfracs = \
-            agent.update(rollouts)
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, \
+                auxiliary_loss = agent.update(rollouts)
 
         else:
             value_loss, action_loss, dist_entropy = agent.update(rollouts)
@@ -324,6 +334,7 @@ def main():
         writer.add_scalar("charts/learning_rate", agent.optimizer.param_groups[0]["lr"], global_step)
         writer.add_scalar("losses/value_loss", value_loss, global_step)
         writer.add_scalar("losses/policy_loss", action_loss, global_step)
+        writer.add_scalar("losses/auxiliary_loss", auxiliary_loss, global_step)
         writer.add_scalar("losses/entropy", dist_entropy, global_step)
 
         if args.algo == 'ppo':

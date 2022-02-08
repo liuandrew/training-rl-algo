@@ -4,6 +4,7 @@ import torch
 import os
 import pickle
 import json
+from ast import literal_eval
 
 
 
@@ -32,6 +33,8 @@ class ParseKwargs(argparse.Action):
                 value = None
             elif isfloat(value):
                 value = float(value)
+            elif '[' in value:
+                value = literal_eval(value)
 
             getattr(namespace, self.dest)[key] = value
 
@@ -227,6 +230,12 @@ def get_args():
         help='pass a string to use a specific NNBase from model.py, e.g. FlexBase')
     parser.add_argument('--nn-base-kwargs', nargs='*', action=ParseKwargs, default=None,
         help='pass kwargs for the NNBase, such as how many shared layers')
+
+    #Andy: add auxiliary loss weight. In the future, we may want to adjust this
+    #   so that we can use a different weighting per task
+    parser.add_argument('--auxiliary-loss-coef', type=float, default=0.3,
+        help='auxiliary loss coefficient (default: 0.3)')
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
