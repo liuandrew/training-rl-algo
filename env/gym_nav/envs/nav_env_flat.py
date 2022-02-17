@@ -512,11 +512,16 @@ class NavEnvFlat(gym.Env):
         else:
             self.world_gen_func(self.character, **self.world_gen_params)
         
+        self.auxiliary_tasks = []
         for task in auxiliary_tasks:
-            if task not in available_auxiliary_tasks.keys():
+            if type(task) == int:
+                self.auxiliary_tasks.append(task)
+            elif task not in available_auxiliary_tasks.keys():
                 raise NotImplementedError('Auxiliary task {} not found. Available options are '.format(
                     task, ', '.join(available_auxiliary_tasks.keys())))
-        self.auxiliary_tasks = [auxiliary_task_to_idx[task] for task in auxiliary_tasks]
+            else:
+                self.auxiliary_tasks.append(auxiliary_task_to_idx[task])
+        # self.auxiliary_tasks = [auxiliary_task_to_idx[task] for task in auxiliary_tasks]
         
     def step(self, action):
         reward = self.default_reward
