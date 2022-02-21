@@ -110,3 +110,6 @@ experiment_configs/*
 experiment_configs/archive/*
 !experiment_configs
 !experiment_configs/archive
+
+# Manual ignore folder
+gitignore/

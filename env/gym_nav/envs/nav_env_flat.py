@@ -53,64 +53,64 @@ idx_to_rgb = {
     
 
     
-def block_view_world(character, block_size=25, randomize_heading=0):
-    '''
-    Create a setting where the goal is perfectly blocked by a block
-    randomize_heading:
-        0 - always fixed
-        1 - randomize headings but point agent in the right direction
-        2 - randomize headings and point agent in random direction
-    '''
-#     print('call block view world')
+# def block_view_world(character, block_size=25, randomize_heading=0):
+#     '''
+#     Create a setting where the goal is perfectly blocked by a block
+#     randomize_heading:
+#         0 - always fixed
+#         1 - randomize headings but point agent in the right direction
+#         2 - randomize headings and point agent in random direction
+#     '''
+# #     print('call block view world')
     
-    reset_objects()
+#     reset_objects()
     
-    boxes, box_centers, box_sizes = generate_boxes(0)
-    circles, circle_centers, circle_radii = generate_circles(0)
+#     boxes, box_centers, box_sizes = generate_boxes(0)
+#     circles, circle_centers, circle_radii = generate_circles(0)
     
-    #add a single block in the center of the screen
-    add_box(Box(np.array([WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2]),
-               np.array([block_size, block_size]), color=2))
-    add_walls()
+#     #add a single block in the center of the screen
+#     add_box(Box(np.array([WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2]),
+#                np.array([block_size, block_size]), color=2))
+#     add_walls()
     
-    base_size = 15
-    base_x = 150
-    base_y = 100
-    base_radius = 88
-    if randomize_heading > 0:
-        angle = np.random.uniform(6.28)
-        x = np.cos(angle) * base_radius
-        y = np.sin(angle) * base_radius
-        goal = Box(np.array([x + base_x, y + base_y]), np.array([base_size, base_size]), 
-            is_goal=True, color=6)
-        globals()['goal'] = goal
-        add_box(goal)
+#     base_size = 15
+#     base_x = 150
+#     base_y = 100
+#     base_radius = 88
+#     if randomize_heading > 0:
+#         angle = np.random.uniform(6.28)
+#         x = np.cos(angle) * base_radius
+#         y = np.sin(angle) * base_radius
+#         goal = Box(np.array([x + base_x, y + base_y]), np.array([base_size, base_size]), 
+#             is_goal=True, color=6)
+#         globals()['goal'] = goal
+#         add_box(goal)
         
-        angle2 = angle + 3.14
-        x = np.cos(angle2) * base_radius
-        y = np.sin(angle2) * base_radius
-        character.pos = np.array([x + base_x, y + base_y])
+#         angle2 = angle + 3.14
+#         x = np.cos(angle2) * base_radius
+#         y = np.sin(angle2) * base_radius
+#         character.pos = np.array([x + base_x, y + base_y])
         
-        if randomize_heading > 1:
-            character.angle = np.random.uniform(6.28)
-        else:
-            character.angle = angle
+#         if randomize_heading > 1:
+#             character.angle = np.random.uniform(6.28)
+#         else:
+#             character.angle = angle
             
-        character.update_rays()
+#         character.update_rays()
         
-    else:
-        #add the goal
-        goal = Box(np.array([WINDOW_SIZE[0] - 50, WINDOW_SIZE[1]/2]),
-                   np.array([base_size, base_size]),
-                   is_goal=True, color=6)
-        globals()['goal'] = goal
-        add_box(goal)
+#     else:
+#         #add the goal
+#         goal = Box(np.array([WINDOW_SIZE[0] - 50, WINDOW_SIZE[1]/2]),
+#                    np.array([base_size, base_size]),
+#                    is_goal=True, color=6)
+#         globals()['goal'] = goal
+#         add_box(goal)
 
-        #set the agent position
-        character.pos = np.array([50, WINDOW_SIZE[1]/2])
-        character.angle = 0
+#         #set the agent position
+#         character.pos = np.array([50, WINDOW_SIZE[1]/2])
+#         character.angle = 0
         
-        character.update_rays()
+#         character.update_rays()
 
 
 
@@ -121,33 +121,33 @@ def dist(v):
 
 
         
-def randomize_location_and_angle(character, sep=True):
-    '''
-    create a random location and start direction for the character
-    noting that we do not allow spawning into objects
-    sep: if set to True, we will make sure character has a minimum distance away
-        from the goal that is at least half the max distance possible from goal
-        to end of window
-    '''
+# def randomize_location_and_angle(character, sep=True):
+#     '''
+#     create a random location and start direction for the character
+#     noting that we do not allow spawning into objects
+#     sep: if set to True, we will make sure character has a minimum distance away
+#         from the goal that is at least half the max distance possible from goal
+#         to end of window
+#     '''
 
-    #max distance from goal to end of window
-    max_goal_sep = dist(np.max([np.array(WINDOW_SIZE) - goal.center, goal.center], axis=0)) 
-    sep = True
-    searching = True
-    while searching:
-        pos = np.random.uniform(WINDOW_SIZE)
-        goal_sep = dist(globals()['goal'].center - pos)
+#     #max distance from goal to end of window
+#     max_goal_sep = dist(np.max([np.array(WINDOW_SIZE) - goal.center, goal.center], axis=0)) 
+#     sep = True
+#     searching = True
+#     while searching:
+#         pos = np.random.uniform(WINDOW_SIZE)
+#         goal_sep = dist(globals()['goal'].center - pos)
 
-        if scene_sdf(pos)[0] > 0 and (not sep or goal_sep > max_goal_sep / 2):
-            #position is okay
-            searching = False
+#         if scene_sdf(pos)[0] > 0 and (not sep or goal_sep > max_goal_sep / 2):
+#             #position is okay
+#             searching = False
             
-    character.pos = pos
-    character.angle = np.random.uniform(6.28)
-#     character.pos = np.array([100, 100])
-#     character.angle = 0
+#     character.pos = pos
+#     character.angle = np.random.uniform(6.28)
+# #     character.pos = np.array([100, 100])
+# #     character.angle = 0
 
-    character.update_rays()
+#     character.update_rays()
 
 
 
@@ -431,7 +431,8 @@ class NavEnvFlat(gym.Env):
                 world_gen_func=None, world_gen_params={}, give_dist=True,
                 give_time=False, collission_penalty=0, default_reward=0,
                 sub_goal_reward=0.01, goal_visible=True, wall_colors=1,
-                task_structure=1, poster=False, auxiliary_tasks=[]):
+                task_structure=1, poster=False, auxiliary_tasks=[],
+                auxiliary_task_args=[]):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -452,16 +453,26 @@ class NavEnvFlat(gym.Env):
         poster:
             whether there should be a poster and on which wall [0-3]
         auxiliary_tasks: (pass as list of tasks desired)
-            'euclidean_start': euclidean distance travelled from start of episode
+            'null': task to output constant 0
+            'euclidean_start': task to output euclidean distance travelled from start of episode
+            'wall_direction': task to output relative degrees required to face a certain wall
+        auxiliary_task_args: (pass as a list of arguments)
+            'null': None (might later implement task to output n values)
+            'euclidean_start': None
+            'wall_direction': 1 (default), 2, 3, or 4 - pass wall that should be faced (east is 1, ccw)
         '''
         super(NavEnvFlat, self).__init__()
 
         #this gives the auxiliary tasks available and dimension of output
         available_auxiliary_tasks = {
-            'euclidean_start': 1
+            'null': 1,
+            'euclidean_start': 1,
+            'wall_direction': 1
         }
         auxiliary_task_to_idx = {
-            'euclidean_start': 0
+            'null': 0,
+            'euclidean_start': 1,
+            'wall_direction': 2
         }
         
         self.total_rewards = 0
@@ -513,6 +524,7 @@ class NavEnvFlat(gym.Env):
             self.world_gen_func(self.character, **self.world_gen_params)
         
         self.auxiliary_tasks = []
+        self.auxiliary_task_args = auxiliary_task_args
         for task in auxiliary_tasks:
             if type(task) == int:
                 self.auxiliary_tasks.append(task)
@@ -521,7 +533,9 @@ class NavEnvFlat(gym.Env):
                     task, ', '.join(available_auxiliary_tasks.keys())))
             else:
                 self.auxiliary_tasks.append(auxiliary_task_to_idx[task])
+        
         # self.auxiliary_tasks = [auxiliary_task_to_idx[task] for task in auxiliary_tasks]
+        # print('auxiliary tasks', self.auxiliary_tasks)
         
     def step(self, action):
         reward = self.default_reward
@@ -656,14 +670,44 @@ class NavEnvFlat(gym.Env):
                 
         auxiliary_output = []
         
-        for task in self.auxiliary_tasks:
-            #euclidean distance from start task (normalized)
+        for i in range(len(self.auxiliary_tasks)):
+        # for i, task in self.auxiliary_tasks:
+            task = self.auxiliary_tasks[i]
+            if i >= len(self.auxiliary_task_args):
+                aux_arg = None
+            else:
+                aux_arg = self.auxiliary_task_args[i]
+            #null task - predict 0
             if task == 0:
+                output = [0]
+                auxiliary_output += output
+            #euclidean distance from start task (normalized)
+            if task == 1:
                 euclid_dist_start = dist(self.character.pos - self.initial_character_position)
                 euclid_dist_start = euclid_dist_start / MAX_LEN
                 output = [euclid_dist_start]
                 auxiliary_output += output
-        
+            #relative angle from wall, depending on arg passed
+            if task == 2:
+                if aux_arg == None:
+                    wall = 0
+                else:
+                    wall = aux_arg - 1
+                if wall < 0 or wall > 3:
+                    raise Exception('Invalid wall number passed for relative wall direction auxiliary' + \
+                        'task. Must use an integer between 1 and 4, or None')
+                
+                if wall > 2:
+                    wall = wall - 4
+                wall_angle = (wall * 0.5) * np.pi
+                char_2pi_angle = (self.character.angle + 2 * np.pi) % (2 * np.pi)
+                
+                min_rel_angle = np.min([abs(wall_angle - char_2pi_angle), 
+                                        abs(wall_angle + 2*np.pi - char_2pi_angle)])
+                output = [min_rel_angle]
+                auxiliary_output += output
+                
+                
         return np.array(auxiliary_output)
     
         
