@@ -93,7 +93,7 @@ class PPO():
                     auxiliary_loss = 0.5 * (auxiliary_truth_batch - auxiliary_preds).pow(2).mean()
                 else:
                     auxiliary_loss = torch.zeros(1)
-                # print(auxiliary_truth_batch, auxiliary_preds)
+                # print(auxiliary_truth_batch, auxiliary_preds, auxiliary_loss)
 
 
                 self.optimizer.zero_grad()

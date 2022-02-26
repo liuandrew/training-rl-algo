@@ -46,6 +46,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     all_rewards = []
     all_hidden_states = []
     all_dones = []
+    all_masks = []
     data = {}
 
     obs = eval_envs.reset()
@@ -62,7 +63,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
                 deterministic=True)
 
         # Obser reward and next obs
-        obs, reward, done, infos = envs.step(action)
+        obs, reward, done, infos = eval_envs.step(action)
         
         eval_masks = torch.tensor(
             [[0.0] if done_ else [1.0] for done_ in done],
@@ -74,6 +75,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         all_rewards.append(reward)
         all_hidden_states.append(eval_recurrent_hidden_states)
         all_dones.append(done)
+        all_masks.append(eval_masks)
 
         if data_callback is not None:
             data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
@@ -94,7 +96,16 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     print(" Evaluation using {} episodes: mean reward {:.5f}\n".format(
         len(eval_episode_rewards), np.mean(eval_episode_rewards)))
 
-    return all_obs, all_actions, all_rewards, all_hidden_states, all_dones, eval_envs, data
+    return {
+        'obs': all_obs,
+        'actions': all_actions,
+        'rewards': all_rewards,
+        'hidden_states': all_hidden_states,
+        'dones': all_dones,
+        'masks': all_masks,
+        'envs': eval_envs,
+        'data': data
+    }
 
 
 def example_data_callback(actor_critic, vec_envs, recurrent_hidden_states, data):

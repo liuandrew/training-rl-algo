@@ -34,6 +34,7 @@ def main():
     else:
         run_name = f"{args.env_name}__{args.seed}__{int(time.time())}"
 
+    print(run_name) #print run name for logging
     if args.track:
         import wandb
 
@@ -161,13 +162,14 @@ def main():
 
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
-
+    print('initializing environments')
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False, capture_video=args.capture_video,
                          env_kwargs=args.env_kwargs)
 
     loaded_model = False
     # print(args.cont)
+    print('initializing model')
     if args.cont:
         loaded_model = True
         actor_critic, obs_rms = torch.load(save_path)
@@ -181,6 +183,7 @@ def main():
                          **args.nn_base_kwargs})
         actor_critic.to(device)
 
+    print('initializing algo')
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
             actor_critic,
@@ -224,6 +227,7 @@ def main():
             shuffle=True,
             drop_last=drop_last)
 
+    print('initializing storage')
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                               envs.observation_space.shape, envs.action_space,
                               actor_critic.recurrent_hidden_state_size,
@@ -320,7 +324,7 @@ def main():
 
         rollouts.compute_returns(next_value, args.use_gae, args.gamma,
                                  args.gae_lambda, args.use_proper_time_limits)
-
+        
         if args.algo == 'ppo':
             value_loss, action_loss, dist_entropy, approx_kl, clipfracs, \
                 auxiliary_loss = agent.update(rollouts)

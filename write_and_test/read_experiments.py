@@ -69,7 +69,7 @@ def tflog2pandas(path: str) -> pd.DataFrame:
 
 
 
-def print_runs(folder='../runs/', prin=True):
+def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False):
     '''
     print tensorboard runs directories
     
@@ -77,7 +77,8 @@ def print_runs(folder='../runs/', prin=True):
     next use load_exp_df with the name and trial number to load it into a df
     
     also plan to update this function as more runs are added with 
-    descriptions of what each run is
+    descriptions of what each run is, if setting descriptions to True
+        will print these out
     '''
     space =  '    '
     branch = '│   '
@@ -85,8 +86,16 @@ def print_runs(folder='../runs/', prin=True):
     last =   '└── '
     
     run_descriptions = {
-        'invisible_shared': ''
-        
+        'invisible_shared': '2D Nav, 4 Wall Colors, change how many layers in the NN' + \
+                            'are shared after RNN. 0 is default',
+        'nav_invisible_shared': 'Cont Nav, 4 Wall Colors, shared layers, same as invisible_shared',
+        'nav_aux_wall': 'Cont Nav, 4 Wall Colors, Auxiliary task of reporting relative' + \
+                            'angle to wall. 1 is proximal, 3 is distal',
+        'nav_euclid_start': 'Cont Nav, 4 Wall Colors, Euclidean distance auxiliary task. ' + \
+                            '0: no task. 1: null task (report 0), 2: euclidean distance task from start pos',
+        'nav_invisible_color': 'Cont Nav, variable wall colors and reward structure. dist: reward shaping, ' + \
+                               'none: no reward shaping. 2: Symmetrical, 2.5: Asymmetrical',
+        'nav_visible': 'Cont Nav, 1 Wall Color, visible randomized platform with or w/o reward shaping baseline'
     }
     
     
@@ -117,8 +126,12 @@ def print_runs(folder='../runs/', prin=True):
                 print(branch*depth + tee+'EXP', key + ':', value)
             else:
                 print(branch*depth+tee+key)
-
-    return unique_experiments
+    if descriptions:
+        print('\n Run Descriptions: \n')
+        for key, value in run_descriptions.items():
+            print(f'{key}: {value} \n')
+    if ret:
+        return unique_experiments
 
 
 
@@ -199,7 +212,7 @@ def plot_exp_df(df, smoothing=0.1):
 
         
 def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
-                label=None):
+                label=None, cloud_alpha=0.1, ignore_first=16):
     '''
     Get the average over a bunch of trials of the same name
     
@@ -210,6 +223,8 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
     ewm: whether to do an exponential average of metric
         if not wanted, pass False
     label: whether to plot with a label
+    cloud_alpha: alpha to show cloud of trials (0 for invisible)
+    ignore_first: ignore_first n elements to filter out noisy first data
     '''
     shortcut_to_key = {
         'value_loss': 'losses/value_loss',
@@ -220,7 +235,7 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     
-    exps = print_runs(prin=False) #just borrow function to get number of experiments
+    exps = print_runs(prin=False, ret=True) #just borrow function to get number of experiments
     if metric in shortcut_to_key:
         metric = shortcut_to_key[metric]
     
@@ -273,6 +288,7 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
             ys[j] = inters[j](xs)
         
         if ewm:
-            ax.fill_between(xs, ys.min(axis=0), ys.max(axis=0), alpha=0.1)
-        ax.plot(xs, ys.mean(axis=0), label=label)
+            ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
+                            ys.max(axis=0)[ignore_first:], alpha=cloud_alpha)
+        ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label)
         

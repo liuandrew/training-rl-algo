@@ -221,7 +221,7 @@ def get_args():
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
 
     #Andy: add options to save model checkpoints
-    parser.add_argument('--checkpoint-interval', type=int, default=5000,
+    parser.add_argument('--checkpoint-interval', type=int, default=100,
         help='number of updates before a checkpoint of the model should be saved, ' + \
         'if 0, then no checkpoints will be saved')
 

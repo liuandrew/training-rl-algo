@@ -16,6 +16,7 @@ class RolloutStorage(object):
         self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
+        #Andy: added auxiliary pred and truths storage
         self.auxiliary_preds = torch.zeros(num_steps, num_processes, auxiliary_output_size)
         self.auxiliary_truths = torch.zeros(num_steps, num_processes, auxiliary_output_size)
         if action_space.__class__.__name__ == 'Discrete':
@@ -40,13 +41,16 @@ class RolloutStorage(object):
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
         self.returns = self.returns.to(device)
-        self.action_log_probs = self.action_log_probs.to(device)
+        self.action_log_probs = self.action_
+        log_probs.to(device)
         self.actions = self.actions.to(device)
         self.masks = self.masks.to(device)
         self.bad_masks = self.bad_masks.to(device)
+        #Andy: added auxiliary truth and preds device
         self.auxiliary_preds = self.auxiliary_preds.to(device)
         self.auxiliary_truths = self.auxiliary_truths.to(device)
 
+    #Andy: added optional insertion of auxiliary pred and truths
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
                value_preds, rewards, masks, bad_masks, auxiliary_preds=None,
                auxiliary_truths=None):
@@ -116,6 +120,7 @@ class RolloutStorage(object):
                     self.returns[step] = self.returns[step + 1] * \
                         gamma * self.masks[step + 1] + self.rewards[step]
 
+    #Andy: added auxiliary pred and truth batches
     def feed_forward_generator(self,
                                advantages,
                                num_mini_batch=None,

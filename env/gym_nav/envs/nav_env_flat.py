@@ -665,6 +665,7 @@ class NavEnvFlat(gym.Env):
 
             return np.array(self.character.ray_obs().reshape(-1), dtype='float')
         
+        
     def get_auxiliary_output(self):
         '''Return the auxiliary output dependent on what tasks are being measured'''
                 
@@ -704,6 +705,7 @@ class NavEnvFlat(gym.Env):
                 
                 min_rel_angle = np.min([abs(wall_angle - char_2pi_angle), 
                                         abs(wall_angle + 2*np.pi - char_2pi_angle)])
+                min_rel_angle = min_rel_angle / np.pi
                 output = [min_rel_angle]
                 auxiliary_output += output
                 
