@@ -426,7 +426,7 @@ def intersect(p1, p2, p3, p4):
 
 class NavEnvFlat(gym.Env):
     metadata = {"render.modes": ['rgb_array', 'human'], 'video.frames_per_second': 24}
-    def __init__(self, num_rays=30, max_steps=200, num_objects=5,
+    def __init__(self, num_rays=30, fov=2, max_steps=200, num_objects=5,
                 rew_structure='dist', give_heading=0, verbose=0,
                 world_gen_func=None, world_gen_params={}, give_dist=True,
                 give_time=False, collission_penalty=0, default_reward=0,
@@ -491,6 +491,8 @@ class NavEnvFlat(gym.Env):
         self.goal_visible = goal_visible # Note: not used, visibility defined by
                                          # task structure at the moment
         self.poster = poster
+        self.num_rays = num_rays
+        self.fov = fov
 
         observation_width = num_rays
         if give_dist:
@@ -506,7 +508,7 @@ class NavEnvFlat(gym.Env):
         self.max_steps = max_steps
         self.current_steps = 0
         
-        self.character = Character()
+        self.character = Character(num_rays=self.num_rays, fov=self.fov)
         self.initial_character_position = self.character.pos.copy()
         self.num_objects = num_objects
         
@@ -748,7 +750,7 @@ class NavEnvFlat(gym.Env):
             if dist(corner - pos) > 50:
                 searching = False
         angle = np.random.uniform(0, 2*np.pi)
-        self.character = Character(pos, angle)
+        self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
 
 
 

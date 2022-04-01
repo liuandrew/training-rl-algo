@@ -196,12 +196,12 @@ def plot_exp_df(df, smoothing=0.1):
     Plot the experiments values from tensorboard df
     (get the df from load_exp_df)
     '''
-    fig, ax = plt.subplots(3, 3, figsize=(15, 15))
+    fig, ax = plt.subplots(3, 4, figsize=(15, 15))
 
     for i, chart in enumerate(df['metric'].unique()):
         # print(chart)
-        x = i // 3
-        y = i % 3
+        x = i // 4
+        y = i % 4
         idx = df['metric'] == chart
         df.loc[idx, 'ewm'] = df.loc[idx, 'value'].ewm(alpha=smoothing).mean()
         d = df[df['metric'] == chart]
@@ -212,7 +212,7 @@ def plot_exp_df(df, smoothing=0.1):
 
         
 def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
-                label=None, cloud_alpha=0.1, ignore_first=16):
+                label=None, cloud_alpha=0.1, ignore_first=16, color=None):
     '''
     Get the average over a bunch of trials of the same name
     
@@ -289,6 +289,6 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
         
         if ewm:
             ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
-                            ys.max(axis=0)[ignore_first:], alpha=cloud_alpha)
-        ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label)
+                            ys.max(axis=0)[ignore_first:], alpha=cloud_alpha, color=color)
+        ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label, color=color)
         

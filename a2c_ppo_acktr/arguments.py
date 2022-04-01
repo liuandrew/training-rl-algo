@@ -228,7 +228,7 @@ def get_args():
     #Andy: add options for using a custom NN base for policy
     parser.add_argument('--nn-base', type=str, default=None,
         help='pass a string to use a specific NNBase from model.py, e.g. FlexBase')
-    parser.add_argument('--nn-base-kwargs', nargs='*', action=ParseKwargs, default=None,
+    parser.add_argument('--nn-base-kwargs', nargs='*', action=ParseKwargs, default={},
         help='pass kwargs for the NNBase, such as how many shared layers')
 
     #Andy: add auxiliary loss weight. In the future, we may want to adjust this
