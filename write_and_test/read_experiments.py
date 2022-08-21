@@ -69,7 +69,8 @@ def tflog2pandas(path: str) -> pd.DataFrame:
 
 
 
-def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False):
+def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False,
+               exclude=1):
     '''
     print tensorboard runs directories
     
@@ -79,6 +80,33 @@ def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False):
     also plan to update this function as more runs are added with 
     descriptions of what each run is, if setting descriptions to True
         will print these out
+        
+    new_run_descriptions:
+        We split the naming of the run into sections based on underscores e.g.
+        {nav}_{env_condition}_{model_condition}_{trial_num}
+        [0]: 'nav': continuous navigation environment
+        [1]: env_condition: 
+            'c1': 1 Wall Color
+            'c2': 2 Wall Colors Symmetric
+            'c2.5': 2 Wall Colors Asymmetric
+            'c4': 4 Wall Colors
+            'pproxim': Poster on Proximal Wall (East wall)
+            'pdistal': Poster on Distal Wall (North wall)
+        [2]: model_condition
+            'none': Basic model, goal only reward, nothing special
+            'dist': Distance based reward shaping
+            'auxeuclid0': No aux task, equivalent to 'none'
+            'auxeuclid1': Null aux task, report constant 0 every timestep
+            'auxeuclid2': Euclidean distance task, report Euclidean distance
+                from start position
+            'auxwall[0-3]': Wall reportin aux task, report angle needed to rotate
+                to face the given wall
+            'shared[0-2]': Same as 'none' but change network structure. Select how many
+                layers are shared between actor and critic. Default is 0 so 0 is equivalent
+                to 'none'
+    exclude:
+        1: don't print any grid nav or visible platform trials, or non nav trials
+
     '''
     space =  '    '
     branch = '│   '
@@ -95,43 +123,57 @@ def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False):
                             '0: no task. 1: null task (report 0), 2: euclidean distance task from start pos',
         'nav_invisible_color': 'Cont Nav, variable wall colors and reward structure. dist: reward shaping, ' + \
                                'none: no reward shaping. 2: Symmetrical, 2.5: Asymmetrical',
-        'nav_visible': 'Cont Nav, 1 Wall Color, visible randomized platform with or w/o reward shaping baseline'
+        'nav_visible': 'Cont Nav, 1 Wall Color, visible randomized platform with or w/o reward shaping baseline',
+        'nav_aux_p[wall]_[aux_task]': 'Cont Nav, Poster distal or proximal, Auxiliary tasks of ' + \
+                        'wall reporting or euclidean reporting (see nav_aux_wall and nav_euclid_start)',
     }
     
+
     
     path = Path(folder)
     if prin:
         print(path.name)
+    ignore_dirs = []
+    if exclude >= 1:
+        ignore_dirs += ['invisible_poster', 'invisible_shared', 'invisible_wallcolors',
+                        'nav_visible_reshaping', 'visible_reshaping', 'visible_wallcolors',
+                        'acrobot', 'cartpole', 'mountaincar', 'pendulum']    
     
-    unique_experiments = {}
-    original_experiment_names = {}
-    depth = 0
-    for d in path.iterdir():
-        if '__' in d.name:
-            trial_name = d.name.split('__')[0]
-            
-            if re.match('.*\_\d*', trial_name):
+    def inner_print(path, depth):
+        directories = []
+        unique_experiments = {}
+        original_experiment_names = {}
+        for d in path.iterdir():
+            if '__' in d.name:
+                trial_name = d.name.split('__')[0]
+                if not re.match('.*\d*', trial_name):
+                    #not a trial, simply print
+                    print(branch*depth+tee+d.name)
                 exp_name = '_'.join(trial_name.split('_')[:-1])
-            else:
-                exp_name = trial_name
-                
-            if exp_name in unique_experiments.keys():
-                unique_experiments[exp_name] += 1
-            else:
-                unique_experiments[exp_name] = 1
-                
-    if prin:
+                if exp_name in unique_experiments.keys():
+                    unique_experiments[exp_name] += 1
+                else:
+                    unique_experiments[exp_name] = 1
+                    original_experiment_names[exp_name] = d.name
+            elif d.is_dir() and d.name not in ignore_dirs:
+                directories.append(d)
         for key, value in unique_experiments.items():
             if value > 1:
                 print(branch*depth + tee+'EXP', key + ':', value)
             else:
-                print(branch*depth+tee+key)
-    if descriptions:
-        print('\n Run Descriptions: \n')
-        for key, value in run_descriptions.items():
-            print(f'{key}: {value} \n')
+                print(branch*depth+tee+original_experiment_names[key])
+        
+        result_dict = unique_experiments.copy()
+        for i, d in enumerate(directories):
+            print(branch*depth + tee+d.name)
+            sub_experiments = inner_print(d, depth+1)
+            result_dict[d] = sub_experiments
+        
+        return result_dict
+            
+    directory_dict = inner_print(path, 0)    
     if ret:
-        return unique_experiments
+        return directory_dict
 
 
 
@@ -288,7 +330,11 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
             ys[j] = inters[j](xs)
         
         if ewm:
-            ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
+            if color is not None:
+                ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
                             ys.max(axis=0)[ignore_first:], alpha=cloud_alpha, color=color)
+            else:
+                ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
+                            ys.max(axis=0)[ignore_first:], alpha=cloud_alpha)
         ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label, color=color)
         

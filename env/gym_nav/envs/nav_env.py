@@ -3,6 +3,11 @@ import gym
 from gym import spaces
 import math
 
+"""
+NOTE: This code is older using ray marching for vision lines which is slow.
+Use nav_env_flat for continuous navigation environment instead
+"""
+
 MAX_MARCH = 20
 EPSILON = 0.1
 DEG_TO_RAD = 0.0174533

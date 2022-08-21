@@ -7,7 +7,7 @@ from a2c_ppo_acktr.envs import make_vec_envs
 
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
              device, ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
-             num_episodes=10, verbose=False):
+             num_episodes=10, verbose=0, with_activations=False):
     '''
     ret_info: level of info that should be tracked and returned
     capture_video: whether video should be captured for episodes
@@ -47,6 +47,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     all_hidden_states = []
     all_dones = []
     all_masks = []
+    all_activations = []
     data = {}
 
     obs = eval_envs.reset()
@@ -56,12 +57,18 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
 
     while len(eval_episode_rewards) < num_episodes:
         with torch.no_grad():
-            _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
-                obs,
-                eval_recurrent_hidden_states,
-                eval_masks,
-                deterministic=True)
-
+            # _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
+            #     obs,
+            #     eval_recurrent_hidden_states,
+            #     eval_masks,
+            #     deterministic=True)
+            
+            outputs = actor_critic.act(obs, eval_recurrent_hidden_states, 
+                                       eval_masks, deterministic=True,
+                                       with_activations=with_activations)
+            action = outputs['action']
+            eval_recurrent_hidden_states = outputs['rnn_hxs']
+            
         # Obser reward and next obs
         obs, reward, done, infos = eval_envs.step(action)
         
@@ -76,6 +83,9 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         all_hidden_states.append(eval_recurrent_hidden_states)
         all_dones.append(done)
         all_masks.append(eval_masks)
+        
+        if with_activations:
+            all_activations.append(outputs['activations'])
 
         if data_callback is not None:
             data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
@@ -87,14 +97,14 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
                 #Andy: add verbosity option
-                if verbose:
+                if verbose >= 2:
                     print('ep ' + str(len(eval_episode_rewards)) + ' rew ' + \
                         str(info['episode']['r']))
 
     # eval_envs.close()
-
-    print(" Evaluation using {} episodes: mean reward {:.5f}\n".format(
-        len(eval_episode_rewards), np.mean(eval_episode_rewards)))
+    if verbose >= 1:
+        print(" Evaluation using {} episodes: mean reward {:.5f}\n".format(
+            len(eval_episode_rewards), np.mean(eval_episode_rewards)))
 
     return {
         'obs': all_obs,
@@ -104,7 +114,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         'dones': all_dones,
         'masks': all_masks,
         'envs': eval_envs,
-        'data': data
+        'data': data,
+        'activations': all_activations,
     }
 
 

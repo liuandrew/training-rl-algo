@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, '..')
 from evaluation import evaluate
 from a2c_ppo_acktr.model import Policy
+from a2c_ppo_acktr import utils
 from a2c_ppo_acktr.envs import make_vec_envs
 import numpy as np
 import matplotlib.pyplot as plt
@@ -51,11 +52,13 @@ The evalu() function includes the episode ending numbers for this purpose
 
 
 def print_trained_models(folder='../trained_models/ppo/', ignore_non_pt=True,
-                        ignore_non_dir_in_first=True):
+                        ignore_non_dir_in_first=True, ret=False, exclude=1):
     '''
     Read the trained_models folder to see what models have been trained
     ignore_non_pt: don't print files without .pt extension
     ignore_non_dir_in_first: don't print files in the parent folder, skip straight to directories
+    exclude:
+        1: don't print any grid nav or visible platform trials
     '''
     
     space =  '    '
@@ -63,15 +66,20 @@ def print_trained_models(folder='../trained_models/ppo/', ignore_non_pt=True,
     tee =    '├── '
     last =   '└── '
     
+    ignore_dirs = []
+    if exclude >= 1:
+        ignore_dirs += ['invisible_poster', 'invisible_shared', 'invisible_wallcolors',
+                        'nav_visible_reshaping', 'visible_reshaping', 'visible_wallcolors']
+    
     path = Path(folder)
     print(path.name)
-    
+        
     def inner_print(path, depth, ignore_non_pt=ignore_non_pt, ignore_non_dir_in_first=ignore_non_dir_in_first):
         directories = []
         unique_experiments = {}
         original_experiment_names = {}
         for d in path.iterdir():
-            if d.is_dir():
+            if d.is_dir() and d.name not in ignore_dirs:
                 directories.append(d)
             elif d.suffix == '.pt':
                 if not re.match('.*\d*\.pt', d.name) and not (ignore_non_dir_in_first and depth == 0):
@@ -92,18 +100,36 @@ def print_trained_models(folder='../trained_models/ppo/', ignore_non_pt=True,
                 print(branch*depth + tee+'EXP', key + ':', value)
             else:
                 print(branch*depth+tee+original_experiment_names[key])
-        for d in directories:
+        
+        result_dict = unique_experiments.copy()
+        for i, d in enumerate(directories):
             print(branch*depth + tee+d.name)
-            inner_print(d, depth+1, ignore_non_pt, ignore_non_dir_in_first)
+            sub_experiments = inner_print(d, depth+1, ignore_non_pt, ignore_non_dir_in_first)
+            result_dict[d] = sub_experiments
+        
+        return result_dict
             
-    inner_print(path, 0, ignore_non_pt, ignore_non_dir_in_first)    
-    
+    directory_dict = inner_print(path, 0, ignore_non_pt, ignore_non_dir_in_first)    
+    if ret:
+        return directory_dict
     
 
 
-def load_model_and_env(experiment, 
+def load_model_and_env(experiment, trial_num=None, env_name=None,
                        base_folder='../trained_models/ppo/'):
     '''
+    Args: 
+        experiment (str): Name of experiment, including subfolder. E.g.
+            'invisible_poster/invisible_poster_shape_0'
+            If not passing a trial_num, can directly pass the exact file. E.g.
+            'invisible_poster/invisible_poster_shape_0_0.pt'
+        trial_num (int, optional): Trial number. If passed, find an appropriate file with
+            the given trial number. The file may end with just the number (e.g. '_0.pt') or
+            with the prefix t (e.g. '_t0.pt')
+        env_name (str, optional): Name of environment. If passed, return the actual
+            environment instead of env_kwargs. Defaults to 'NavEnv-v0' (continuous nav environment)
+        base_folder (str, optional): Base folder where experiments are saved to
+    
     Load a model along with its environment
     Use the fact that all saved models end with _i where i indicates the trial number
     
@@ -113,37 +139,69 @@ def load_model_and_env(experiment,
     Note that after training has been completed, we need to manually go back to write_experiments.ipynb
     to add the appropriate env kwargs to the trained models folder
     
-    Return: model, obs_rms, env_kwargs
+    Return: model, obs_rms, env_kwargs (or env)
     '''
     
-    env_file = '_'.join(experiment.split('_')[:-1]) + '_env'
+    if '/' in experiment:
+        sub_folders = '/'.join(experiment.split('/')[:-1])
+        folder = Path(base_folder)/sub_folders
+        experiment = experiment.split('/')[-1]
+    else:
+        folder = Path(base_folder)
+    
+    
+    #Find the corresponding environment kwargs file
+    if trial_num is None:
+        env_file = '_'.join(experiment.split('_')[:-1]) + '_env'
+    else:
+        env_file = experiment + '_env'
+        
+    if trial_num is None:
+        file = Path(folder)/experiment
+    else:
+        # try to find a file with either _0.pt or _t0.pt (if trial_num = 0 for example)
+        file = Path(folder)/(f'{experiment}_{trial_num}.pt')
+        if not file.exists():
+            file = Path(folder)/(f'{experiment}_t{trial_num}.pt')
+            if not file.exists():
+                raise Exception(f'{experiment} with _{trial_num}.pt and _t{trial_num}.pt suffixes do not exist.')
+        
+        
     try:
-        env_kwargs = pickle.load(open(base_folder + env_file, 'rb'))
+        env_kwargs = pickle.load(open(folder/env_file, 'rb'))
     except:
-        Exception('Error loading env_kwargs, make sure that they have been saved from write_experiments.ipynb')
+        raise Exception(f'Error loading env_kwargs for {folder/env_file}, make sure that they have been saved from write_experiments.ipynb')
     # env = gym.make('Gridworld-v0', **env_kwargs)
     
-    model, obs_rms = torch.load(base_folder + experiment)
+    model, obs_rms = torch.load(file)
     
-    return model, obs_rms, env_kwargs
+    
+    if env_name is not None:
+        env = gym.make(env_name, **env_kwargs)
+        return model, obs_rms, env
+    else:
+        return model, obs_rms, env_kwargs
 
 
 
 
-def evalu(model, obs_rms, n=100, env_name='Gridworld-v0', env_kwargs={},
-          data_callback=None, capture_video=False, verbose=False):
+def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
+          data_callback=None, capture_video=False, verbose=0, with_activations=False):
     '''
     Evaluate using the current global model, obs_rms, and env_kwargs
     Load ep_ends, ep_lens into global vars to be used by get_ep
         as well as all_obs, all_actions, all_rewards, all_hidden_states, all_dones, eval_envs, data
         
     capture_video: whether video should be captured
-    verbose: print every episode
+    verbose: 
+        0: no summary prints
+        1: print mean reward for all episodes
+        2: print rewards for each episode
     '''
     
     results = evaluate(model, obs_rms, env_name, 1, 1, eval_log_dir, device, 
          env_kwargs=env_kwargs, data_callback=data_callback, num_episodes=n, capture_video=capture_video,
-         verbose=verbose)
+         verbose=verbose, with_activations=with_activations)
 
     #ep_ends and ep_lens used to easily pull data for single episodes
     results['ep_ends'] = np.where(np.array(results['dones']).flatten())[0]
@@ -167,6 +225,132 @@ def evalu(model, obs_rms, n=100, env_name='Gridworld-v0', env_kwargs={},
     # len(pca.transform(hidden_states))
     
     return results
+
+
+
+def forced_action_evaluate(actor_critic, obs_rms, env_name='NavEnv-v0', forced_actions=None, seed=0, num_processes=1, eval_log_dir='/tmp/gym/_eval/',
+             device=torch.device('cpu'), ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
+             num_episodes=10, verbose=0, with_activations=False):
+    '''
+    forced_actions: pass something to tell the function what forced actions to use
+        int or float: use the same action every step
+        function or lambda: function will be called at every step with the current step number
+            (function doesn't need to use this information, but needs to be able to take the positional parameter)
+            function should return int or float
+        list or np.ndarray: could be implemented
+    ret_info: level of info that should be tracked and returned
+    capture_video: whether video should be captured for episodes
+    env_kwargs: any kwargs to create environment with
+    data_callback: a function that should be called at each step to pull information
+        from the environment if needed. The function will take arguments
+            def callback(actor_critic, vec_envs, recurrent_hidden_states, data):
+        actor_critic: the actor_critic network
+        vec_envs: the vec envs (can call for example vec_envs.get_attr('objects') to pull data)
+        recurrent_hidden_states: these are given in all data, but may want to use in computation
+        obs: observation this step (after taking action) - 
+            note that initial observation is never seen by data_callback
+            also note that this observation will have the mean normalized
+            so may instead want to call vec_envs.get_method('get_observation')
+        action: actions this step
+        reward: reward this step
+        data: a data dictionary that will continuously be passed to be updated each step
+            it will start as an empty dicionary, so keys must be initialized
+        see below at example_data_callback in this file for an example
+    '''
+
+    eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes,
+                              None, eval_log_dir, device, True, 
+                              capture_video=capture_video, 
+                              env_kwargs=env_kwargs)
+
+    vec_norm = utils.get_vec_normalize(eval_envs)
+    if vec_norm is not None:
+        vec_norm.eval()
+        vec_norm.obs_rms = obs_rms
+
+    eval_episode_rewards = []
+
+    all_obs = []
+    all_actions = []
+    all_rewards = []
+    all_hidden_states = []
+    all_dones = []
+    all_masks = []
+    all_activations = []
+    data = {}
+
+    obs = eval_envs.reset()
+    eval_recurrent_hidden_states = torch.zeros(
+        num_processes, actor_critic.recurrent_hidden_state_size, device=device)
+    eval_masks = torch.zeros(num_processes, 1, device=device)
+
+    step = 0
+    while len(eval_episode_rewards) < num_episodes:
+        with torch.no_grad():
+            outputs = actor_critic.act(obs, eval_recurrent_hidden_states, 
+                                       eval_masks, deterministic=True,
+                                       with_activations=with_activations)
+            
+            if forced_actions is None:
+                action = outputs['action']
+            elif type(forced_actions) in [int, float]:
+                action = torch.full((num_processes, 1), forced_actions)
+            elif type(forced_actions) == type(lambda:0):
+                actions = [torch.tensor(forced_actions(step)) for i in range(num_processes)]
+                action = torch.vstack(actions)            
+            
+            eval_recurrent_hidden_states = outputs['rnn_hxs']
+            
+        # Obser reward and next obs
+        obs, reward, done, infos = eval_envs.step(action)
+        
+        eval_masks = torch.tensor(
+            [[0.0] if done_ else [1.0] for done_ in done],
+            dtype=torch.float32,
+            device=device)
+
+        all_obs.append(obs)
+        all_actions.append(action)
+        all_rewards.append(reward)
+        all_hidden_states.append(eval_recurrent_hidden_states)
+        all_dones.append(done)
+        all_masks.append(eval_masks)
+        
+        if with_activations:
+            all_activations.append(outputs['activations'])
+
+        if data_callback is not None:
+            data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
+                obs, action, reward, data)
+        else:
+            data = {}
+
+        for info in infos:
+            if 'episode' in info.keys():
+                eval_episode_rewards.append(info['episode']['r'])
+                #Andy: add verbosity option
+                if verbose >= 2:
+                    print('ep ' + str(len(eval_episode_rewards)) + ' rew ' + \
+                        str(info['episode']['r']))
+        
+        step += 1
+
+    # eval_envs.close()
+    if verbose >= 1:
+        print(" Evaluation using {} episodes: mean reward {:.5f}\n".format(
+            len(eval_episode_rewards), np.mean(eval_episode_rewards)))
+
+    return {
+        'obs': all_obs,
+        'actions': all_actions,
+        'rewards': all_rewards,
+        'hidden_states': all_hidden_states,
+        'dones': all_dones,
+        'masks': all_masks,
+        'envs': eval_envs,
+        'data': data,
+        'activations': all_activations,
+    }
     
     
     
@@ -264,10 +448,13 @@ def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
                                   obs, action, reward, data):
     if data == {}:
         data['pos'] = []
+        data['angle'] = []
         # data['layer_activations'] = []
     
     pos = vec_envs.get_attr('character')[0].pos.copy()
+    angle = vec_envs.get_attr('character')[0].angle
     data['pos'].append(pos)
+    data['angle'].append(angle)
     
     return data
         
@@ -296,7 +483,7 @@ def data_callback(actor_critic, vec_envs, recurrent_hidden_states,
         data['facing_goal'] = []
         data['dist_from_goal'] = []
     
-    agent = vec_envs.get_attr('agent')[0]
+    agent = vec_envs.get_attr('character')[0]
     objects = vec_envs.get_attr('objects')[0]
     
     goal_y = (objects == 2).argmax(axis=0).max()
@@ -331,7 +518,10 @@ def data_callback(actor_critic, vec_envs, recurrent_hidden_states,
     
     
 def get_activations(model, results):
-    """After running evalu, pass the model and results
+    """
+    OBSOLETE: evalu can now collect activations during episode
+    
+    After running evalu, pass the model and results
     to collect the layer activations at each timestep during experimentation
     Assuming the model is a FlexBase network
 
@@ -350,6 +540,24 @@ def get_activations(model, results):
                                                     masks, deterministic=True)
     
     return activations
+
+
+def activation_testing(model, env):
+    vis_walls = env.vis_walls
+    vis_wall_refs = env.vis_wall_refs
+    
+    env.character.pos = np.array([10, 10])
+    env.character.angle = 0
+    env.character.update_rays(vis_walls, vis_wall_refs)
+    
+    obs = torch.tensor(env.get_observation(), dtype=torch.float32).view(1, -1)
+    rnn_hxs = torch.zeros(1, model.recurrent_hidden_state_size, dtype=torch.float32)
+    masks = torch.zeros(1, 1, dtype=torch.float32)
+    
+    activations = model.base.forward_with_activations(obs, rnn_hxs, masks)
+    
+    
+    
     
     
 def determine_linear_fit(layer_activations, quantity):
@@ -423,4 +631,5 @@ def plot_2d_activations(layer_activations, quantity, min_val=0, max_val=300,
     plt.tight_layout()
     
     return regressors
+        
         

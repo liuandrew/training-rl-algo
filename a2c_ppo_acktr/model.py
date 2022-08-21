@@ -69,15 +69,28 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        if self.base.has_auxiliary:
-            value, actor_features, rnn_hxs, auxiliary = \
-                self.base(inputs, rnn_hxs, masks, deterministic)
+    def act(self, inputs, rnn_hxs, masks, deterministic=False, with_activations=False):
+        # !! ANDY: This is kind of hardcoded to be able to evaluate old models
+        # For the most part, we are using FlexBase moving forward, but the best thing
+        # to do here would be to refactor everything to return dictionaries of results
+        # We also haven't tested everything with MLPBase so there may be bugs
+        if type(self.base) != MLPBase and self.base.has_auxiliary:
+            # value, actor_features, rnn_hxs, auxiliary = \
+            #     self.base(inputs, rnn_hxs, masks, deterministic)
+            outputs = self.base(inputs, rnn_hxs, masks, deterministic, with_activations)
+            value = outputs['value']
+            actor_features = outputs['actor_features']
+            rnn_hxs = outputs['rnn_hxs']
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
             # if no auxiliary output, storage will expect an output 0
             # with shape the same as value
             auxiliary = torch.zeros(value.shape)
+            outputs = {
+                'value': value,
+                'actor_features': actor_features,
+                'rnn_hxs': rnn_hxs,
+            }
 
         dist = self.dist(actor_features)
 
@@ -88,18 +101,28 @@ class Policy(nn.Module):
 
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
+        
+        outputs['action'] = action
+        outputs['action_log_probs'] = action_log_probs
 
-        return value, action, action_log_probs, rnn_hxs, auxiliary
+        return outputs
 
     def get_value(self, inputs, rnn_hxs, masks):
         outputs = self.base(inputs, rnn_hxs, masks)
-        value = outputs[0]
+        value = outputs['value']
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        if self.base.has_auxiliary:
-            value, actor_features, rnn_hxs, auxiliary = \
-                self.base(inputs, rnn_hxs, masks)
+        
+        # Andy: Should refactor this function to also return outputs dict
+        if type(self.base) != MLPBase and self.base.has_auxiliary:
+            outputs = self.base(inputs, rnn_hxs, masks)
+            actor_features = outputs['actor_features']
+            action = outputs['action']
+            value = outputs['value']
+            rnn_hxs = outputs['rnn_hxs']
+            auxiliary = outputs['auiliary_preds']
+            
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
             auxiliary = torch.zeros(value.shape)
@@ -234,7 +257,7 @@ class CNNBase(NNBase):
 class MLPBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=64):
         super(MLPBase, self).__init__(recurrent, num_inputs, hidden_size)
-
+        
         if recurrent:
             num_inputs = hidden_size
 
@@ -415,9 +438,6 @@ class FlexBase(NNBase):
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
         
-        shared_layers = []
-        critic_layers = []
-        actor_layers = []
         
         self.shared_layers = []
         self.critic_layers = []
@@ -526,82 +546,82 @@ class FlexBase(NNBase):
             self.has_auxiliary = False
         self.train()
             
-    def forward(self, inputs, rnn_hxs, masks, deterministic=False):
-        current_layer = 0
-        shared_layer_idx = 0
-        individual_layer_idx = 0
-        on_shared_layers = True
-        auxiliary_preds = torch.zeros((inputs.shape[0], self.auxiliary_output_size))
-        x = inputs
+    # def forward(self, inputs, rnn_hxs, masks, deterministic=False):
+    #     current_layer = 0
+    #     shared_layer_idx = 0
+    #     individual_layer_idx = 0
+    #     on_shared_layers = True
+    #     auxiliary_preds = torch.zeros((inputs.shape[0], self.auxiliary_output_size))
+    #     x = inputs
         
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-            current_layer += 1
+    #     if self.is_recurrent:
+    #         x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+    #         current_layer += 1
         
-        actor_x = x
-        critic_x = x
+    #     actor_x = x
+    #     critic_x = x
         
-        for i in range(current_layer, self.num_layers+1):
-            # iterate through the layers whether shared or individual actor/critic
-            # print(i)
-            # first check if any auxiliary tasks have the current depth
-            for j, head in enumerate(self.auxiliary_heads):
-                # depth = head[0]
-                # side = head[1]
-                depth = head[0]
-                if depth == -1:
-                    depth = self.num_layers
-                if depth == current_layer:
-                    # print('Calling auxiliary head at depth {}'.format(i))
-                    # figure out if we are on shared layer
-                    if on_shared_layers:
-                        auxiliary_input = x
-                    elif head[1] == 0:
-                        auxiliary_input = actor_x
-                    elif head[1] == 1:
-                        auxiliary_input = critic_x
+    #     for i in range(current_layer, self.num_layers+1):
+    #         # iterate through the layers whether shared or individual actor/critic
+    #         # print(i)
+    #         # first check if any auxiliary tasks have the current depth
+    #         for j, head in enumerate(self.auxiliary_heads):
+    #             # depth = head[0]
+    #             # side = head[1]
+    #             depth = head[0]
+    #             if depth == -1:
+    #                 depth = self.num_layers
+    #             if depth == current_layer:
+    #                 # print('Calling auxiliary head at depth {}'.format(i))
+    #                 # figure out if we are on shared layer
+    #                 if on_shared_layers:
+    #                     auxiliary_input = x
+    #                 elif head[1] == 0:
+    #                     auxiliary_input = actor_x
+    #                 elif head[1] == 1:
+    #                     auxiliary_input = critic_x
                     
-                    # convert to output of auxiliary head
-                    auxiliary_output = self.auxiliary_layers[j](auxiliary_input)
-                    if self.auxiliary_layer_types[j] == 1:
-                        if deterministic:
-                            auxiliary_output = auxiliary_output.mode()
-                        else:
-                            auxiliary_output = auxiliary_output.sample()
-                    size = auxiliary_output.shape[1]
-                    start_idx = self.auxiliary_output_idxs[j]
-                    auxiliary_preds[:, start_idx:start_idx+size] = auxiliary_output
+    #                 # convert to output of auxiliary head
+    #                 auxiliary_output = self.auxiliary_layers[j](auxiliary_input)
+    #                 if self.auxiliary_layer_types[j] == 1:
+    #                     if deterministic:
+    #                         auxiliary_output = auxiliary_output.mode()
+    #                     else:
+    #                         auxiliary_output = auxiliary_output.sample()
+    #                 size = auxiliary_output.shape[1]
+    #                 start_idx = self.auxiliary_output_idxs[j]
+    #                 auxiliary_preds[:, start_idx:start_idx+size] = auxiliary_output
             
-            # continue proceding through layers
-            # check if we still have shared layers to complete
-            if len(self.shared_layers) > 0 and shared_layer_idx < len(self.shared_layers):
-                x = self.shared_layers[shared_layer_idx](x)
-                # print('Calling shared layer {}'.format(shared_layer_idx))
-                shared_layer_idx += 1
-                # if shared layers are done, this will set actor_x and critic_x
-                actor_x = x
-                critic_x = x
-            elif len(self.actor_layers) > 0 and individual_layer_idx < len(self.actor_layers):
-                # no more shared layers - move to actor critic layers
-                on_shared_layers = False
-                # print('Calling actor critic layer {}'.format(individual_layer_idx))
-                actor_x = self.actor_layers[individual_layer_idx](actor_x)
-                critic_x = self.critic_layers[individual_layer_idx](critic_x)
-                individual_layer_idx += 1
+    #         # continue proceding through layers
+    #         # check if we still have shared layers to complete
+    #         if len(self.shared_layers) > 0 and shared_layer_idx < len(self.shared_layers):
+    #             x = self.shared_layers[shared_layer_idx](x)
+    #             # print('Calling shared layer {}'.format(shared_layer_idx))
+    #             shared_layer_idx += 1
+    #             # if shared layers are done, this will set actor_x and critic_x
+    #             actor_x = x
+    #             critic_x = x
+    #         elif len(self.actor_layers) > 0 and individual_layer_idx < len(self.actor_layers):
+    #             # no more shared layers - move to actor critic layers
+    #             on_shared_layers = False
+    #             # print('Calling actor critic layer {}'.format(individual_layer_idx))
+    #             actor_x = self.actor_layers[individual_layer_idx](actor_x)
+    #             critic_x = self.critic_layers[individual_layer_idx](critic_x)
+    #             individual_layer_idx += 1
                 
-            current_layer += 1
+    #         current_layer += 1
                     
                     
-        # Finally get critic value estimation
-        critic_val = self.critic_layers[-1](critic_x)
+    #     # Finally get critic value estimation
+    #     critic_val = self.critic_layers[-1](critic_x)
                     
-        if self.has_auxiliary:
-            return critic_val, actor_x, rnn_hxs, auxiliary_preds
-        else:
-            return critic_val, actor_x, rnn_hxs
+    #     if self.has_auxiliary:
+    #         return critic_val, actor_x, rnn_hxs, auxiliary_preds
+    #     else:
+    #         return critic_val, actor_x, rnn_hxs
         
         
-    def forward_with_activations(self, inputs, rnn_hxs, masks, deterministic=False):
+    def forward(self, inputs, rnn_hxs, masks, deterministic=False, with_activations=False):
         """Same as forward function but this will pass back all intermediate values
 
             _type_: _description_
@@ -690,16 +710,18 @@ class FlexBase(NNBase):
         # Finally get critic value estimation
         critic_val = self.critic_layers[-1](critic_x)
 
-        results = {
-            'critic_val': critic_val,
-            'actor_x': actor_x,
+        outputs = {
+            'value': critic_val,
+            'actor_features': actor_x,
             'rnn_hxs': rnn_hxs,
-            'shared_activations': shared_activations,
-            'actor_activations': actor_activations,
-            'critic_activations': critic_activations
         }
         
         if self.has_auxiliary:
-            results['auxiliary_preds'] = auxiliary_preds
-
-        return results
+            outputs['auxiliary_preds'] = auxiliary_preds
+        if with_activations:
+            outputs['activations'] = {
+                'shared_activations': shared_activations,
+                'actor_activations': actor_activations,
+                'critic_activations': critic_activations
+            }        
+        return outputs

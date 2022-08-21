@@ -260,11 +260,20 @@ def main():
             #Andy: add global step
             global_step += 1 * args.num_processes
             # Sample actions
+            
+            #Andy: Update to use outputs dict
             with torch.no_grad():
-
-                value, action, action_log_prob, recurrent_hidden_states, auxiliary_preds = \
-                actor_critic.act(rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                # value, action, action_log_prob, recurrent_hidden_states, auxiliary_preds = \
+                # actor_critic.act(rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                #     rollouts.masks[step])
+                outputs = actor_critic.act(rollouts.obs[step], rollouts.recurrent_hidden_states[step],
                     rollouts.masks[step])
+                action = outputs['action']
+                value = outputs['value']
+                action_log_prob = outputs['action_log_probs']
+                recurrent_hidden_states = outputs['rnn_hxs']
+                auxiliary_preds = outputs['auxiliary_preds']
+
 
 
             # Obser reward and next obs
