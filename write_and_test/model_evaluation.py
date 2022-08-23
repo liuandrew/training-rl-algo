@@ -633,3 +633,10 @@ def plot_2d_activations(layer_activations, quantity, min_val=0, max_val=300,
     return regressors
         
         
+def generate_model_and_test(base='FlexBase', env='NavEnv-v0', env_kwargs={}):
+    env = gym.make(env, **env_kwargs)
+    obs = env.reset()
+    action_space = env.action_space
+    model = Policy(obs.shape, action_space, base=base)
+    
+    

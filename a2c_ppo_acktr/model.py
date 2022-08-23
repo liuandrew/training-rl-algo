@@ -74,13 +74,15 @@ class Policy(nn.Module):
         # For the most part, we are using FlexBase moving forward, but the best thing
         # to do here would be to refactor everything to return dictionaries of results
         # We also haven't tested everything with MLPBase so there may be bugs
-        if type(self.base) != MLPBase and self.base.has_auxiliary:
+        # if type(self.base) != MLPBase and self.base.has_auxiliary:
+        if type(self.base) == FlexBase:
             # value, actor_features, rnn_hxs, auxiliary = \
             #     self.base(inputs, rnn_hxs, masks, deterministic)
             outputs = self.base(inputs, rnn_hxs, masks, deterministic, with_activations)
             value = outputs['value']
             actor_features = outputs['actor_features']
             rnn_hxs = outputs['rnn_hxs']
+        
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
             # if no auxiliary output, storage will expect an output 0
@@ -424,7 +426,7 @@ class FlexBase(NNBase):
         tasks yet
     '''
     def __init__(self, num_inputs, recurrent=True, hidden_size=64,
-                num_layers=2, num_shared_layers=-1, auxiliary_heads=[]):
+                num_layers=2, num_shared_layers=0, auxiliary_heads=[]):
         super(FlexBase, self).__init__(recurrent, num_inputs, hidden_size)
         
         self.num_layers = num_layers
