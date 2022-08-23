@@ -76,7 +76,7 @@ def load_exp_log():
     try:
         exp_log = pickle.load(open('experiment_log', 'rb'))
     except:
-        exp_log = reset_exp_log
+        exp_log = reset_exp_log()
     return exp_log
 
 
