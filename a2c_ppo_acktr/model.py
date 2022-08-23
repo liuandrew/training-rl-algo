@@ -82,16 +82,19 @@ class Policy(nn.Module):
             value = outputs['value']
             actor_features = outputs['actor_features']
             rnn_hxs = outputs['rnn_hxs']
+            if not self.base.has_auxiliary:
+                outputs['auxiliary_preds'] = torch.zeros(value.shape)
+
         
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
             # if no auxiliary output, storage will expect an output 0
             # with shape the same as value
-            auxiliary = torch.zeros(value.shape)
             outputs = {
                 'value': value,
                 'actor_features': actor_features,
                 'rnn_hxs': rnn_hxs,
+                'auxiliary_preds': torch.zeros(value.shape)
             }
 
         dist = self.dist(actor_features)
@@ -117,14 +120,15 @@ class Policy(nn.Module):
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
         
         # Andy: Should refactor this function to also return outputs dict
-        if type(self.base) != MLPBase and self.base.has_auxiliary:
+        if type(self.base) == FlexBase:
             outputs = self.base(inputs, rnn_hxs, masks)
             actor_features = outputs['actor_features']
-            action = outputs['action']
             value = outputs['value']
             rnn_hxs = outputs['rnn_hxs']
-            auxiliary = outputs['auiliary_preds']
-            
+            if self.base.has_auxiliary:
+                auxiliary = outputs['auiliary_preds']
+            else:
+                auxiliary = torch.zeros(value.shape)        
         else:
             value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
             auxiliary = torch.zeros(value.shape)
