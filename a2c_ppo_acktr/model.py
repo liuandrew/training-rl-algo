@@ -126,7 +126,7 @@ class Policy(nn.Module):
             value = outputs['value']
             rnn_hxs = outputs['rnn_hxs']
             if self.base.has_auxiliary:
-                auxiliary = outputs['auiliary_preds']
+                auxiliary = outputs['auxiliary_preds']
             else:
                 auxiliary = torch.zeros(value.shape)        
         else:
