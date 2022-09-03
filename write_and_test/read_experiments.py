@@ -81,6 +81,11 @@ def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False,
     descriptions of what each run is, if setting descriptions to True
         will print these out
         
+    !!
+    print, descriptions, and ret are all broken due to adding in directory
+        inner_prints. Not hard to fix but no reason to atm
+    !!
+        
     new_run_descriptions:
         We split the naming of the run into sections based on underscores e.g.
         {nav}_{env_condition}_{model_condition}_{trial_num}
@@ -177,39 +182,48 @@ def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False,
 
 
 
-def load_exp_df(exp_name, trial_num=0, folder='../runs/', save_csv=True):
+def load_exp_df(exp_name=None, path=None, trial_num=0, folder='../runs/', save_csv=True):
     '''
     load experiment tensorboard run into a dataframe
     if save_csv is True, also convert into a csv for faster loading later
     
-    if trial_num is None, directly try to load the given exp_name
+    if trial_num is None, directly try to load the given exp_name e.g., 
+    load_exp_df(exp_name='nav_c4_shared0_t0__1661300055', 
+            folder='../runs/nav_invisible_shared', trial_num=None)
+        
+    if path is given, directly use this path run folder to load e.g.,
+    load_exp_df(path='../runs/nav_invisible_shared/nav_c4_shared0_t0__1661300055')
+
+    path > exp_name in precedence if both parameters passed
     '''
     dirs = os.listdir(folder)
     
-    if trial_num is not None:
-        results = []
-        for d in dirs:
-            if '__' in d:
-                trial_name = d.split('__')[0]
-                if re.match('.*\_\d*', trial_name):
-                    name = '_'.join(trial_name.split('_')[:-1])
-                    trial = trial_name.split('_')[-1]
-                    if 't' in trial:
-                        trial = trial.split('t')[-1]
-                    trial = int(trial)
+    
+    if path is None:
+        if trial_num is not None:
+            results = []
+            for d in dirs:
+                if '__' in d:
+                    trial_name = d.split('__')[0]
+                    if re.match('.*\_\d*', trial_name):
+                        name = '_'.join(trial_name.split('_')[:-1])
+                        trial = trial_name.split('_')[-1]
+                        if 't' in trial:
+                            trial = trial.split('t')[-1]
+                        trial = int(trial)
 
-                    if exp_name == name and trial == trial_num:
-                        results.append(folder + d)
+                        if exp_name == name and trial == trial_num:
+                            results.append(folder + d)
 
-        if len(results) > 1:
-            print('Warning: more than one experiment with the name and trial num found')
-        if len(results) == 0:
-            print('No experiments found')
-            return None
+            if len(results) > 1:
+                print('Warning: more than one experiment with the name and trial num found')
+            if len(results) == 0:
+                print('No experiments found')
+                return None
 
-        path = results[0]
-    else:
-        path = folder + exp_name
+            path = results[0]
+        else:
+            path = folder + exp_name
     files = os.listdir(path)
     
     #look for a preconverted csv dataframe file
@@ -253,17 +267,18 @@ def plot_exp_df(df, smoothing=0.1):
         ax[x, y].set_title(chart)
 
         
-def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
+def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
                 label=None, cloud_alpha=0.1, ignore_first=16, color=None):
     '''
     Get the average over a bunch of trials of the same name
     
-    trial_name: Name of experiment, should be one found from print_runs()
+    trial_name: Name of experiment, 
     metric: Name of metric to plot, some shortcuts can be passed like
         value_loss, policy_loss, return, length
     ax: Optionally pass ax to plot on
     ewm: whether to do an exponential average of metric
         if not wanted, pass False
+    ret: if True, instead of plotting, return the xs, ys, min_x, max_x
     label: whether to plot with a label
     cloud_alpha: alpha to show cloud of trials (0 for invisible)
     ignore_first: ignore_first n elements to filter out noisy first data
@@ -274,36 +289,45 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
         'return': 'charts/episodic_return',
         'length': 'charts/episodic_length'
     }
-    if ax is None:
+    if ax is None and ret is False:
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     
-    exps = print_runs(prin=False, ret=True) #just borrow function to get number of experiments
+    exp_name = trial_name.split('/')[-1]
+    base_folder = Path('../runs/')
+    # exps = print_runs(prin=False, ret=True) #just borrow function to get number of experiments
+    folder = '/'.join(trial_name.split('/')[:-1])
+    if len(folder) == 0:
+        folder = '.'
+    folder = base_folder/folder
+        
+    trials = list(folder.iterdir())
+    trial_names = [item.name.split('__')[0] for item in folder.iterdir()]
+    # print(trial_names)
+    trial_names = ['_'.join(item.split('_')[:-1]) for item in trial_names]
+    trial_nums = [item.split('_')[-1] for item in trial_names]
+    trial_nums = [int(re.search('\d+', num)[0]) for num in trial_nums]
+            
     if metric in shortcut_to_key:
         metric = shortcut_to_key[metric]
     
-    if trial_name not in exps:
+    if exp_name not in trial_names:
         print('No experiments with the given name found in runs folder')    
     else:
         # num_trials = exps[trial_name]
-        folder = '../runs/'
-        files = os.listdir(folder)
-        exps = []
-        for file in files:
-            if trial_name in file:
-                exps.append(file)
-        
+        trial_idxs = np.array(trial_names) == exp_name
+        exps = np.array(trials)[trial_idxs]
+                
         # Averaging code same as from plot_cloud_from_dict in data_visualize.ipynb
         first_xs = []
         last_xs = []
         inters = []
-        num_trials = 0
+        num_trials = 0        
         
-        # for i in range(num_trials):
         for exp in exps:
             # Load df from run file
             # df = load_exp_df(trial_name, i)
             
-            df = load_exp_df(exp, trial_num=None)
+            df = load_exp_df(path=str(exp))
             df = df[df['metric'] == metric]
             if len(df) < 1:
                 raise Exception('No metric called {} found in {}'.format(
@@ -311,16 +335,13 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
             
             first_xs.append(df.iloc[0]['step'])
             last_xs.append(df.iloc[-1]['step'])
-            
             if ewm:
                 df['ewm'] = df['value'].ewm(alpha=ewm).mean()
                 inter = scipy.interpolate.interp1d(df['step'], df['ewm'])
                 inters.append(inter)
             else:
                 inter = scipy.interpolate.interp1d(df['step'], df['value'])
-                
             num_trials += 1
-            
         min_x = np.max(first_xs)
         max_x = np.min(last_xs)
         xs = np.arange(min_x, max_x, 200)
@@ -329,12 +350,15 @@ def average_runs(trial_name, metric='return', ax=None, ewm=0.01,
         for j in range(num_trials):
             ys[j] = inters[j](xs)
         
-        if ewm:
-            if color is not None:
-                ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
-                            ys.max(axis=0)[ignore_first:], alpha=cloud_alpha, color=color)
-            else:
-                ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
-                            ys.max(axis=0)[ignore_first:], alpha=cloud_alpha)
-        ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label, color=color)
-        
+        if ret is False:
+            if ewm:
+                if color is not None:
+                    ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
+                                ys.max(axis=0)[ignore_first:], alpha=cloud_alpha, color=color)
+                else:
+                    ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
+                                ys.max(axis=0)[ignore_first:], alpha=cloud_alpha)
+            h = ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label, color=color)
+            return h
+        else:
+            return xs, ys, min_x, max_x

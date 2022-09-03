@@ -449,7 +449,6 @@ def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
     if data == {}:
         data['pos'] = []
         data['angle'] = []
-        # data['layer_activations'] = []
     
     pos = vec_envs.get_attr('character')[0].pos.copy()
     angle = vec_envs.get_attr('character')[0].angle
@@ -457,7 +456,32 @@ def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
     data['angle'].append(angle)
     
     return data
+
+
         
+def poster_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
+                                  obs, action, reward, data):
+    if data == {}:
+        data['pos'] = []
+        data['angle'] = []
+        data['poster_seen'] = []
+    
+    pos = vec_envs.get_attr('character')[0].pos.copy()
+    angle = vec_envs.get_attr('character')[0].angle
+    data['pos'].append(pos)
+    data['angle'].append(angle)
+    
+    #Check whether poster has been seen yet
+    if len(data['poster_seen']) > 0 and data['poster_seen'][-1] == True:
+        data['poster_seen'].append(True)
+    else:
+        true_obs = vec_envs.get_attr('env')[0].get_observation()
+        if (true_obs == 4/6).any(): #Poster in view
+            data['poster_seen'].append(True)
+        else:
+            data['poster_seen'].append(False)
+    
+    return data
     
     
     
