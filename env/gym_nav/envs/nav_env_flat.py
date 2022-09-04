@@ -134,6 +134,8 @@ class Character:
             self.pos[1] += math.sin(self.angle) * speed
             
         else:
+            min_dist = max(min_dist, speed * 0.1) # Make sure agent can't move backwards
+            
             self.pos[0] += math.cos(self.angle) * (min_dist - speed * 0.1)
             self.pos[1] += math.sin(self.angle) * (min_dist - speed * 0.1)
         self.update_rays(vis_walls, vis_wall_refs)
