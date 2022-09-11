@@ -183,6 +183,29 @@ def load_model_and_env(experiment, trial_num=None, env_name=None,
         return model, obs_rms, env_kwargs
 
 
+def load_checkpoint(experiment, checkpoint=None, base_folder='../trained_models/checkpoint'):
+    '''
+    Load a saved model checkpoint, and if no checkpoint is given,
+    print out possible checkpoint options
+    '''
+    folder = Path(base_folder)
+    path = folder/experiment
+    
+    checkpoints = [f.name.split('.pt')[0] for f in path.iterdir() if '.pt' in f.name]
+    if len(checkpoints) == 0:
+        raise Exception('No checkpoints found in the given folder')
+    
+    if checkpoint == None:
+        print('Available checkpoints:', checkpoints)
+    else:
+        checkpoint = str(checkpoint)
+        checkpoint = checkpoint.split('.pt')[0]
+        if checkpoint not in checkpoints:
+            raise Exception('Given checkpoint does not exist')
+        else:
+            return torch.load(path/f'{checkpoint}.pt')
+        
+    
 
 
 def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
@@ -321,7 +344,7 @@ def forced_action_evaluate(actor_critic, obs_rms, env_name='NavEnv-v0', forced_a
 
         if data_callback is not None:
             data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
-                obs, action, reward, data)
+                obs, action, reward, done, data)
         else:
             data = {}
 
@@ -445,7 +468,7 @@ def animate_episode(ep_num=0, trajectory=False):
     
     
 def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
-                                  obs, action, reward, data):
+                                  obs, action, reward, done, data):
     if data == {}:
         data['pos'] = []
         data['angle'] = []
@@ -460,11 +483,12 @@ def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
 
         
 def poster_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
-                                  obs, action, reward, data):
+                                  obs, action, reward, done, data):
     if data == {}:
         data['pos'] = []
         data['angle'] = []
         data['poster_seen'] = []
+        data['poster_in_view'] = []
     
     pos = vec_envs.get_attr('character')[0].pos.copy()
     angle = vec_envs.get_attr('character')[0].angle
@@ -472,14 +496,39 @@ def poster_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
     data['angle'].append(angle)
     
     #Check whether poster has been seen yet
-    if len(data['poster_seen']) > 0 and data['poster_seen'][-1] == True:
-        data['poster_seen'].append(True)
+    done = done[0]
+    true_obs = vec_envs.get_attr('env')[0].get_observation()
+    poster_in_view = False
+    if (true_obs == 4/6).any(): #Poster in view
+        poster_in_view = True
+        
+    data['poster_in_view'].append(poster_in_view)
+    
+    if done == False:
+        # print('continue ep')
+        # print()
+        if len(data['poster_seen']) > 0 and data['poster_seen'][-1] == True:
+            # print(data['poster_seen'][-1])
+            data['poster_seen'].append(True)
+        else:
+            data['poster_seen'].append(poster_in_view)
     else:
-        true_obs = vec_envs.get_attr('env')[0].get_observation()
-        if (true_obs == 4/6).any(): #Poster in view
+        # print('new ep')
+        if poster_in_view:
             data['poster_seen'].append(True)
         else:
             data['poster_seen'].append(False)
+        
+        
+        
+    # if len(data['poster_seen']) > 0 and data['poster_seen'][-1] == True and done == False:
+    #     data['poster_seen'].append(True)
+    # else:
+    #     true_obs = vec_envs.get_attr('env')[0].get_observation()
+    #     if (true_obs == 4/6).any(): #Poster in view
+    #         data['poster_seen'].append(True)
+    #     else:
+    #         data['poster_seen'].append(False)
     
     return data
     
@@ -487,7 +536,7 @@ def poster_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
     
     
 def data_callback(actor_critic, vec_envs, recurrent_hidden_states, 
-                  obs, action, reward, data):
+                  obs, action, reward, done, data):
     """Example of a data callback, this basic one is intended
     for 'GridNav-v0'. We take these arguments and can perform
     evaluations on them to collect data during episodes

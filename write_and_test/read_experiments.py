@@ -302,9 +302,10 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
         
     trials = list(folder.iterdir())
     trial_names = [item.name.split('__')[0] for item in folder.iterdir()]
-    # print(trial_names)
-    trial_names = ['_'.join(item.split('_')[:-1]) for item in trial_names]
     trial_nums = [item.split('_')[-1] for item in trial_names]
+    trial_names = ['_'.join(item.split('_')[:-1]) for item in trial_names]
+    # print(trial_names)
+    # print(trial_nums)
     trial_nums = [int(re.search('\d+', num)[0]) for num in trial_nums]
             
     if metric in shortcut_to_key:

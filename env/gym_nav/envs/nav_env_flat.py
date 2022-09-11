@@ -317,7 +317,7 @@ class NavEnvFlat(gym.Env):
                 sub_goal_reward=0.01, goal_visible=True, wall_colors=1,
                 task_structure=1, poster=False, auxiliary_tasks=[],
                 auxiliary_task_args=[], fixed_reset=[None, None],
-                character_reset_pos=0):
+                character_reset_pos=0, turn_speed=0.2, move_speed=10):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -335,6 +335,8 @@ class NavEnvFlat(gym.Env):
         task_structure:
             1: visible goal, randomize position
             2: invisible goal, fixed position
+            3: invisible goal, randomize position of char and goal at start
+                try to reach the goal as many times as possible over fixed length episode
         poster:
             whether there should be a poster and on which wall [0-3]
         auxiliary_tasks: (pass as list of tasks desired)
@@ -387,6 +389,8 @@ class NavEnvFlat(gym.Env):
         self.fov = fov
         self.fixed_reset = fixed_reset
         self.character_reset_pos = character_reset_pos
+        self.turn_speed = turn_speed
+        self.move_speed = move_speed
 
         observation_width = num_rays
         if give_dist:
@@ -440,12 +444,12 @@ class NavEnvFlat(gym.Env):
         info = {}
         
         if action == 0:
-            self.character.rotate(-0.2, self.vis_walls, self.vis_wall_refs)
+            self.character.rotate(-self.turn_speed, self.vis_walls, self.vis_wall_refs)
         if action == 1:
-            collision_obj = self.character.move(10, self.col_walls, self.col_wall_refs,
+            collision_obj = self.character.move(self.move_speed, self.col_walls, self.col_wall_refs,
                                 self.vis_walls, self.vis_wall_refs)
         if action == 2:
-            self.character.rotate(0.2, self.vis_walls, self.vis_wall_refs)
+            self.character.rotate(self.turn_speed, self.vis_walls, self.vis_wall_refs)
         if action == 3:
             pass
 
@@ -461,7 +465,13 @@ class NavEnvFlat(gym.Env):
                 if self.verbose:
                     print('goal reached!')
                 reward = float(1)
-                done = True
+                
+                #If performing a fixed platform experiment, episode
+                #ends on collision. For moving platform, only character position resets
+                if self.task_structure <= 2:
+                    done = True
+                else:
+                    self.reset_character_position()
             else:
 #                 reward = -10
                 reward = float(self.collission_penalty)
@@ -655,6 +665,17 @@ class NavEnvFlat(gym.Env):
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
             self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
             self.boxes.append(goal)
+            
+        elif self.task_structure == 3:
+            #generate randomly positioned invisible goal
+            #min distance of 10 from the walls
+            corner = np.random.uniform(low=10, high=270, size=(2,))
+            goal = Box(corner, [goal_size, goal_size], color=0, is_goal=True)
+            goal_walls, goal_wall_refs = self.get_walls([goal])
+            self.vis_walls, self.vis_wall_refs = walls, wall_refs
+            self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            self.boxes.append(goal)
+
 
         #generate character which must be at least some distance from the goal
         searching = True
@@ -670,6 +691,29 @@ class NavEnvFlat(gym.Env):
                     searching = False
         angle = np.random.uniform(0, 2*np.pi)
         self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
+
+
+    def reset_character_position(self):
+        #Reset character position alone, used for task_structure 3
+        # to reset character but not end episode after goal found
+        searching = True
+        goal_center = np.array(self.boxes[-1].center)
+        goal_size = 20
+        wall_thickness = 1
+        
+        while searching:
+            # Old position randomizer - too much space away from goal
+            if self.character_reset_pos == 0:
+                pos = np.random.uniform(low=30, high=270, size=(2,))
+                if dist(goal_center - pos) > 50:
+                    searching = False
+            elif self.character_reset_pos == 1:
+                pos = np.random.uniform(low=wall_thickness+3, high=300-wall_thickness-3, size=(2,))
+                if dist(goal_center - pos) > goal_size*1.5:
+                    searching = False
+        angle = np.random.uniform(0, 2*np.pi)
+        self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
+        self.character.update_rays(self.vis_walls, self.vis_wall_refs)
 
 
 

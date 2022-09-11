@@ -89,7 +89,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
 
         if data_callback is not None:
             data = data_callback(actor_critic, eval_envs, eval_recurrent_hidden_states,
-                obs, action, reward, data)
+                obs, action, reward, done, data)
         else:
             data = {}
 
