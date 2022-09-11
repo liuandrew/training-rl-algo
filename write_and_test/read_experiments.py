@@ -30,6 +30,8 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 
+import proplot as pplt
+
 
 # Extraction function
 def tflog2pandas(path: str) -> pd.DataFrame:
@@ -196,12 +198,15 @@ def load_exp_df(exp_name=None, path=None, trial_num=0, folder='../runs/', save_c
 
     path > exp_name in precedence if both parameters passed
     '''
-    dirs = os.listdir(folder)
-    
     
     if path is None:
         if trial_num is not None:
             results = []
+            if '/' in exp_name:
+                sub_folders = '/'.join(exp_name.split('/')[:-1]) + '/'
+                folder = folder + sub_folders
+                exp_name = exp_name.split('/')[-1]
+            dirs = os.listdir(folder)
             for d in dirs:
                 if '__' in d:
                     trial_name = d.split('__')[0]
@@ -246,25 +251,25 @@ def load_exp_df(exp_name=None, path=None, trial_num=0, folder='../runs/', save_c
     return results
 
 
-
 def plot_exp_df(df, smoothing=0.1):
     '''
     Plot the experiments values from tensorboard df
     (get the df from load_exp_df)
-    '''
-    fig, ax = plt.subplots(3, 4, figsize=(15, 15))
-
+    ''' 
+    fig, ax = pplt.subplots(nrows=3, ncols=4, share=False)
+    titles = list(df['metric'].unique())
+    for i in range(12-len(titles)):
+        titles.append('')
+    ax.format(title=titles)
+    
     for i, chart in enumerate(df['metric'].unique()):
-        # print(chart)
-        x = i // 4
-        y = i % 4
         idx = df['metric'] == chart
         df.loc[idx, 'ewm'] = df.loc[idx, 'value'].ewm(alpha=smoothing).mean()
         d = df[df['metric'] == chart]
+        
+        ax[i].plot(d['step'], d['value'], c='C0', alpha=0.1)
+        ax[i].plot(d['step'], d['ewm'], c='C0')
 
-        ax[x, y].plot(d['step'], d['value'], c='C0', alpha=0.1)
-        ax[x, y].plot(d['step'], d['ewm'], c='C0')
-        ax[x, y].set_title(chart)
 
         
 def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,

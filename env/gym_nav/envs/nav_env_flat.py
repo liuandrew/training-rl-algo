@@ -317,7 +317,8 @@ class NavEnvFlat(gym.Env):
                 sub_goal_reward=0.01, goal_visible=True, wall_colors=1,
                 task_structure=1, poster=False, auxiliary_tasks=[],
                 auxiliary_task_args=[], fixed_reset=[None, None],
-                character_reset_pos=0, turn_speed=0.2, move_speed=10):
+                character_reset_pos=0, turn_speed=0.2, move_speed=10,
+                num_actions=4):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -391,6 +392,7 @@ class NavEnvFlat(gym.Env):
         self.character_reset_pos = character_reset_pos
         self.turn_speed = turn_speed
         self.move_speed = move_speed
+        self.num_actions = num_actions
 
         observation_width = num_rays
         if give_dist:
@@ -401,7 +403,7 @@ class NavEnvFlat(gym.Env):
             observation_width += 1
 
         self.observation_space = spaces.Box(low=0, high=6, shape=(observation_width,))
-        self.action_space = spaces.Discrete(4) #turn left, forward, right as actions
+        self.action_space = spaces.Discrete(num_actions) #turn left, forward, right as actions
         
         self.max_steps = max_steps
         self.current_steps = 0
