@@ -256,6 +256,8 @@ def main():
                 agent.optimizer, j, num_updates,
                 agent.optimizer.lr if args.algo == "acktr" else args.lr)
 
+        #1. Collect args.num_steps * args.num_processes number of experience steps
+        #from the environment
         for step in range(args.num_steps):
             #Andy: add global step
             global_step += 1 * args.num_processes
@@ -310,6 +312,7 @@ def main():
                             action_log_prob, value, reward, masks, bad_masks,
                             auxiliary_preds, auxiliary_truths)
 
+        #2. Compute rewards and update parameters with policy improvement
         with torch.no_grad():
             next_value = actor_critic.get_value(
                 rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],

@@ -395,11 +395,17 @@ class NavEnvFlat(gym.Env):
         self.num_actions = num_actions
 
         observation_width = num_rays
+        self.ray_obs_width = num_rays
         if give_dist:
             observation_width = observation_width * 2
+            self.ray_obs_width = observation_width
         if give_heading:
             observation_width += 1
         if give_time:
+            observation_width += 1
+        #For ongoing episode resetting position when goal reached,
+        #agent needs to be told when platform is actually reached
+        if task_structure == 3:
             observation_width += 1
 
         self.observation_space = spaces.Box(low=0, high=6, shape=(observation_width,))
@@ -480,6 +486,10 @@ class NavEnvFlat(gym.Env):
         
         
         observation = self.get_observation()
+        
+        if self.task_structure == 3 and collision_obj != None and \
+            collision_obj.is_goal:
+            observation[self.ray_obs_width] = 1
         auxiliary_output = self.get_auxiliary_output()
         info['auxiliary'] = auxiliary_output
         
@@ -586,8 +596,10 @@ class NavEnvFlat(gym.Env):
             obs = self.character.ray_obs()
             if not self.give_dist:
                 obs = obs[:self.num_rays]
+            if self.task_structure == 3:
+                obs = np.append(obs, [0.])
 
-            return np.array(self.character.ray_obs().reshape(-1), dtype='float')
+            return obs
         
         
     def get_auxiliary_output(self):
