@@ -379,3 +379,69 @@ def prune_fail_episodes(targets, dones):
     return pruned_targets
 
 
+
+def split_by_ep(targets, dones):
+    '''
+    Similar to prune_fail_episodes, use dones to split a
+    recorded set of values from evaluation by episodes
+    '''
+    done_idxs = np.where(np.vstack(dones))[0]
+    split_targets = []
+    for i in range(len(done_idxs)):
+        if i == 0:
+            done_targets = targets[:done_idxs[i]]
+        else:
+            done_targets = targets[done_idxs[i-1]:done_idxs[i]]
+
+        split_targets.append(done_targets)
+    return split_targets
+
+
+def draw_box(env=None, corner=None, size=None, ax=None, c='y'):
+    '''
+    Draw a box to an axis. By default, use static platform location
+    and size for platform
+    '''
+    if env is not None:
+        for box in env.boxes:
+            if box.is_goal:
+                corner = box.corner
+                size = box.size
+                break
+    else:
+        if corner is None:
+            corner = np.array([240, 60])
+        if size == None:
+            size = [20, 20]
+    if type(size) != list:
+        size = [size, size]
+        
+    box_array = np.vstack([
+        corner,
+        corner+np.array([0, size[1]]),
+        corner+np.array([size[0], size[1]]),
+        corner+np.array([size[0], 0]),
+        corner
+    ]).T
+    
+    if ax == None:
+        plt.plot(box_array[0], box_array[1], c=c)
+    else:
+        ax.plot(box_array[0], box_array[1], c=c)
+    
+    
+        
+def dones_to_timesteps(dones):
+    '''
+    Given a set of dones, create episode-split timesteps that increment
+    for each timestep (just used for plotting)
+    '''
+    i=1
+    steps = []
+    for j, done in enumerate(dones):
+        if done[0] == True:
+            i = 1
+        steps.append(i)
+        i += 1
+    steps = np.array(steps)
+    return steps

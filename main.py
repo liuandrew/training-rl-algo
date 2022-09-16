@@ -170,6 +170,7 @@ def main():
     loaded_model = False
     # print(args.cont)
     print('initializing model')
+    print(args.save_interval)
     if args.cont:
         loaded_model = True
         actor_critic, obs_rms = torch.load(save_path)
