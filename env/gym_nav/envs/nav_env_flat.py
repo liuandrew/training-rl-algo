@@ -410,6 +410,9 @@ class NavEnvFlat(gym.Env):
         #agent needs to be told when platform is actually reached
         if task_structure == 3:
             observation_width += 1
+        if task_structure == 4:
+            num_grid = self.num_grid_slices ** 2
+            observation_width += num_grid + 1
 
         self.observation_space = spaces.Box(low=0, high=6, shape=(observation_width,))
         self.action_space = spaces.Discrete(num_actions) #turn left, forward, right as actions
@@ -633,9 +636,9 @@ class NavEnvFlat(gym.Env):
             if self.task_structure == 4:
                 # Need to create one-hot encoding for grid target
                 num_grid = self.num_grid_slices ** 2
-                obs_add = np.zeros(num_grid)
+                obs_add = np.zeros(num_grid + 1)
                 obs_add[self.target_grid] = 1
-                obs_add[-1] = self.last_reward
+                obs_add[num_grid] = self.last_reward
                 obs = np.append(obs, obs_add)
 
             return obs
