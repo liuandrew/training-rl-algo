@@ -318,7 +318,7 @@ class NavEnvFlat(gym.Env):
                 task_structure=1, poster=False, auxiliary_tasks=[],
                 auxiliary_task_args=[], fixed_reset=[None, None],
                 character_reset_pos=0, turn_speed=0.2, move_speed=10,
-                num_actions=4):
+                num_actions=4, num_grid_slices=5):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -393,6 +393,9 @@ class NavEnvFlat(gym.Env):
         self.turn_speed = turn_speed
         self.move_speed = move_speed
         self.num_actions = num_actions
+        self.num_grid_slices = num_grid_slices
+        self.target_grid = 0
+        self.last_reward = 0
 
         observation_width = num_rays
         self.ray_obs_width = num_rays
@@ -483,8 +486,24 @@ class NavEnvFlat(gym.Env):
             else:
 #                 reward = -10
                 reward = float(self.collission_penalty)
-        
-        
+                
+        if self.task_structure == 4:
+            # Give reward if character is in the correct grid
+            # Every 40 steps, change the current grid goal
+            if (self.current_steps != 0 and 
+                self.current_steps % 40 == 0):
+                self.change_target_grid()
+            pos = self.character.pos
+            x_grid = int(np.floor(self.target_grid / self.num_grid_slices))
+            y_grid = self.target_grid % self.num_grid_slices
+            x_low = x_grid * WINDOW_SIZE[0] / self.num_grid_slices
+            x_high = (x_grid + 1) * WINDOW_SIZE[0] / self.num_grid_slices
+            y_low = y_grid * WINDOW_SIZE[0] / self.num_grid_slices
+            y_high = (y_grid + 1) * WINDOW_SIZE[0] / self.num_grid_slices
+            if x_low <= pos[0] <= x_high and y_low <= pos[1] <= y_high:
+                reward = float(1)
+            
+        self.last_reward = reward
         observation = self.get_observation()
         
         if self.task_structure == 3 and collision_obj != None and \
@@ -524,7 +543,9 @@ class NavEnvFlat(gym.Env):
             self.character.pos = start_point
         if start_angle is not None:
             self.character.angle = start_angle
-            
+        if self.task_structure == 4:
+            self.change_target_grid()    
+        
         self.character.update_rays(self.vis_walls, self.vis_wall_refs)
         observation = self.get_observation()
         self.initial_character_position = self.character.pos.copy()
@@ -542,7 +563,18 @@ class NavEnvFlat(gym.Env):
         self.character.draw()
         for box in self.boxes:
             box.draw()
-
+        if self.task_structure == 4:
+            x_grid = int(np.floor(self.target_grid / self.num_grid_slices))
+            y_grid = self.target_grid % self.num_grid_slices
+            x_low = x_grid * WINDOW_SIZE[0] / self.num_grid_slices
+            y_low = y_grid * WINDOW_SIZE[0] / self.num_grid_slices
+            x_size = WINDOW_SIZE[0] / self.num_grid_slices
+            y_size = WINDOW_SIZE[1] / self.num_grid_slices
+            corner = np.array([x_low, y_low])
+            size = np.array([x_size, y_size])
+            grid_box = Box(corner, size, color=6, is_goal=True)
+            grid_box.draw()
+        
         fig.canvas.draw()
         image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
         image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
@@ -598,6 +630,13 @@ class NavEnvFlat(gym.Env):
                 obs = obs[:self.num_rays]
             if self.task_structure == 3:
                 obs = np.append(obs, [0.])
+            if self.task_structure == 4:
+                # Need to create one-hot encoding for grid target
+                num_grid = self.num_grid_slices ** 2
+                obs_add = np.zeros(num_grid)
+                obs_add[self.target_grid] = 1
+                obs_add[-1] = self.last_reward
+                obs = np.append(obs, obs_add)
 
             return obs
         
@@ -689,7 +728,14 @@ class NavEnvFlat(gym.Env):
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
             self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
             self.boxes.append(goal)
+            
+        # No platform generation for task 4
+        elif self.task_structure == 4:
+            corner = np.array([0., 0.])
+            self.vis_walls, self.vis_wall_refs = walls, wall_refs
+            self.col_walls, self.col_wall_refs = walls, wall_refs
 
+            
 
         #generate character which must be at least some distance from the goal
         searching = True
@@ -704,6 +750,11 @@ class NavEnvFlat(gym.Env):
                 if dist((corner + [goal_size/2, goal_size/2]) - pos) > goal_size*1.5:
                     searching = False
         angle = np.random.uniform(0, 2*np.pi)
+        
+        if self.task_structure == 4:
+            pos = np.array([150., 150.])
+            angle = np.pi / 2
+            
         self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
 
 
@@ -815,7 +866,10 @@ class NavEnvFlat(gym.Env):
             walls = walls + box.get_walls()
             wall_refs = wall_refs + [box] * 4
         return walls, wall_refs
-
+    
+    def change_target_grid(self):
+        num_grid = self.num_grid_slices ** 2
+        self.target_grid = np.random.choice(np.arange(num_grid))
 
     def seed(self, seed=0):
         np.random.seed(seed)
