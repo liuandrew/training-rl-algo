@@ -110,6 +110,7 @@ experiment_configs/*
 experiment_configs/archive/*
 !experiment_configs
 !experiment_configs/archive
+write_and_test/data
 
 # Manual ignore folder
 gitignore/

@@ -543,7 +543,7 @@ class NavEnvFlat(gym.Env):
         if start_point is not None:
             if type(start_point) is not np.ndarray:
                 raise ValueError("start_point must be np.ndarray")
-            self.character.pos = start_point
+            self.character.pos = start_point.copy()
         if start_angle is not None:
             self.character.angle = start_angle
         if self.task_structure == 4:
