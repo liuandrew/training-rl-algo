@@ -673,8 +673,8 @@ class NavEnvFlat(gym.Env):
             if task == 2:
                 if aux_arg == None:
                     wall = 0
-                # else:
-                #     wall = aux_arg - 1
+                else:
+                    wall = aux_arg
                 if wall < 0 or wall > 3:
                     raise Exception('Invalid wall number passed for relative wall direction auxiliary' + \
                         'task. Must use an integer between 0 and 3, or None (defaults to 0)')
