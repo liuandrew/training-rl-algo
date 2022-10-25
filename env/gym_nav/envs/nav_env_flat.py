@@ -362,12 +362,14 @@ class NavEnvFlat(gym.Env):
         available_auxiliary_tasks = {
             'null': 1,
             'euclidean_start': 1,
-            'wall_direction': 1
+            'wall_direction': 1,
+            'goal_dist': 1
         }
         auxiliary_task_to_idx = {
             'null': 0,
             'euclidean_start': 1,
-            'wall_direction': 2
+            'wall_direction': 2,
+            'goal_dist': 3
         }
         
         self.total_rewards = 0
@@ -671,11 +673,11 @@ class NavEnvFlat(gym.Env):
             if task == 2:
                 if aux_arg == None:
                     wall = 0
-                else:
-                    wall = aux_arg - 1
+                # else:
+                #     wall = aux_arg - 1
                 if wall < 0 or wall > 3:
                     raise Exception('Invalid wall number passed for relative wall direction auxiliary' + \
-                        'task. Must use an integer between 1 and 4, or None')
+                        'task. Must use an integer between 0 and 3, or None (defaults to 0)')
                 
                 if wall > 2:
                     wall = wall - 4
@@ -687,7 +689,15 @@ class NavEnvFlat(gym.Env):
                 min_rel_angle = min_rel_angle / np.pi
                 output = [min_rel_angle]
                 auxiliary_output += output
-                
+            #3: distance between agent and goal
+            if task == 3:
+                goal_pos = self.boxes[-1].center
+                char_pos = self.character.pos
+                goal_dist = dist(char_pos - goal_pos)
+                #normalize distance to [0, 1]
+                goal_dist = goal_dist / MAX_LEN
+                output = [goal_dist]
+                auxiliary_output += output
                 
         return np.array(auxiliary_output)
     
