@@ -16,12 +16,13 @@ If running this file directly from command line, will iterate through experiment
     config files and run the experiments
 '''
 
-def convert_config_to_command(file, python3=False, cont=False):
+def convert_config_to_command(file, python3=False, cont=False,
+                              config_folder=CONFIG_FOLDER):
     '''
     when passed a file name in experiment_configs, load the config and turn it into
     a command line line to run the experiment
     '''
-    config = pickle.load(open(CONFIG_FOLDER + file, 'rb'))
+    config = pickle.load(open(config_folder + file, 'rb'))
     if python3:
         run_string = 'python3 main.py '
     else:

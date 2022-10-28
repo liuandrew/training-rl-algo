@@ -157,7 +157,7 @@ def main():
             os.makedirs(checkpoint_path)
         except OSError:
             pass
-
+    
 
 
     torch.set_num_threads(1)
@@ -171,17 +171,43 @@ def main():
     # print(args.cont)
     print('initializing model')
     print(args.save_interval)
+    
+    #Andy: for continuing an experiment, args.cont is True
     if args.cont:
         loaded_model = True
         actor_critic, obs_rms = torch.load(save_path)
-
-    if not loaded_model or not args.cont:
+    
+    if not loaded_model:
         actor_critic = Policy(
             envs.observation_space.shape,
             envs.action_space,
             base=args.nn_base,
             base_kwargs={'recurrent': args.recurrent_policy, 
                          **args.nn_base_kwargs})
+        
+        #Andy: if cloning parameters, do it here. We are assuming
+        #that the target cloning network has the appropriate parameter
+        #sizes
+        if args.clone_parameter_experiment:
+            clone_args = args.clone_args
+            clone_actor_critic, obs_rms = torch.load(clone_args['clone_path'])
+            clone_layers = clone_args['clone_layers']
+            freeze_layers = clone_args['freeze']
+            
+            clone_params = list(clone_actor_critic.parameters())
+            actor_critic_params = list(actor_critic.parameters())
+            
+            if type(clone_layers) == int:
+                clone_layers = range(clone_layers)
+            if type(freeze_layers) == bool:
+                freeze_layers = [freeze_layers]*len(clone_layers)
+            for i, layer in enumerate(clone_layers):
+                freeze = freeze_layers[i]
+                
+                actor_critic_params[layer].data.copy_(clone_params[layer].data)
+                if freeze:
+                    actor_critic_params[layer].requires_grad = False
+        
         actor_critic.to(device)
 
     print('initializing algo')

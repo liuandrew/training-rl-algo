@@ -235,6 +235,14 @@ def get_args():
     #   so that we can use a different weighting per task
     parser.add_argument('--auxiliary-loss-coef', type=float, default=0.3,
         help='auxiliary loss coefficient (default: 0.3)')
+    
+    #Andy: add new experiment type - load and freeze parameters set from  an existing model
+    parser.add_argument('--clone-parameter-experiment', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='if toggled, attempt to load a model as named from clone-path parameter to use for a new model')
+    parser.add_argument('--clone-args', nargs='*', action=ParseKwargs, default={},
+        help='if clone-parameter-eperiment is true, pass params. Params expected: \n"clone_path": direct path to target clone newtork \n' + \
+             '"clone_layers": list of layers that we want to clone or int of first n layers\n' + \
+             '"freeze": boolean of whether to freeze the cloned layers. True/False or list for each layer in list')
 
     args = parser.parse_args()
 

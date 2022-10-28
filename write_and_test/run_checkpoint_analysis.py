@@ -272,9 +272,6 @@ Setup points and trajectories
 '''
 combined_actions, keep_start_points, keep_start_angles = pickle.load(open(f'data/pdistal_rim_heatmap/width64_comb_acts', 'rb'))
 
-checkpoint_folder = '../trained_models/checkpoint/nav_poster_netstructure/'
-data_folder = 'data/pdistal_rim_heatmap/'
-
 #Starting around rim - First generate start points and angles
 WINDOW_SIZE = (300, 300)
 step_size = 10.
@@ -302,17 +299,19 @@ start_points = np.vstack(start_points)
 
 
 
-def collect_checkpoint_data(width, trial):
-    print(f'Collecting trajectory data for width {width} trial {trial}')
+def collect_checkpoint_data(trial_name, trial):
+    print(f'Collecting trajectory data for {trial_name}:{trial}')
     start_time = time.time()
     
-    path = checkpoint_folder + f'nav_pdistal_width{width}batch200_t{trial}'
-    model_name = f'nav_poster_netstructure/nav_pdistal_width{width}batch200'
+    path = checkpoint_folder + f'{trial_name}_t{trial}'
+    # Get env_kwargs
+    model_name = f'{model_folder}{trial_name}'
+    print(model_name)
     _, _, kwargs = load_model_and_env(model_name, trial)
 
     checkpoints = list(Path(path).iterdir())
 
-    save_path = data_folder + f'width{width}_checkpoint'
+    save_path = data_folder + f'{trial_name}_checkpoint'
     if not Path(save_path).exists():
         checkpoint_data = {'copied': {}, 'policy': {}}
     else:
@@ -370,15 +369,14 @@ def collect_checkpoint_data(width, trial):
     print('Wall time:', round(end_time-start_time, 2))
         
 
-def compute_heatmaps(width, trial):
-    print(f'Computing heatmaps for width {width} trial {trial}')
+def compute_heatmaps(trial_name, trial):
+    print(f'Computing heatmaps for {trial_name}:{trial}')
     start_time = time.time()
     
-    data_folder = 'data/pdistal_rim_heatmap/'
-    data_path = data_folder + f'width{width}_checkpoint'
+    data_path = data_folder + f'{trial_name}_checkpoint'
     checkpoint_data = pickle.load(open(data_path, 'rb'))
 
-    heatmap_path = data_folder + f'width{width}_checkpoint_hms'
+    heatmap_path = data_folder + f'{trial_name}_checkpoint_hms'
     if not Path(heatmap_path).exists():
         heatmap_data = {}
     else:
@@ -410,18 +408,17 @@ def compute_heatmaps(width, trial):
 
 
 
-def compute_summary_stats(width, trial):
-    print(f'Compute summary stats for width {width} trial {trial}')
+def compute_summary_stats(trial_name, trial):
+    print(f'Compute summary stats for width {trial_name}:{trial}')
     start_time = time.time()
     
     kmeans = pickle.load(open('data/pdistal_rim_heatmap/kmeans_heatmap_clusterer', 'rb'))
 
-    data_folder = 'data/pdistal_rim_heatmap/'
-    data_path = data_folder + f'width{width}_checkpoint'
+    data_path = data_folder + f'{trial_name}_checkpoint'
     checkpoint_data = pickle.load(open(data_path, 'rb'))
 
-    heatmap_path = data_folder + f'width{width}_checkpoint_hms'
-    summary_path = data_folder + f'width{width}_checkpoint_summ'
+    heatmap_path = data_folder + f'{trial_name}_checkpoint_hms'
+    summary_path = data_folder + f'{trial_name}_checkpoint_summ'
 
     heatmap_data = pickle.load(open(heatmap_path, 'rb'))
     if not Path(summary_path).exists():
@@ -473,11 +470,35 @@ def compute_summary_stats(width, trial):
 
 
 if __name__ == '__main__':
-    num_trials = 10
-    widths = [2, 3, 4, 8, 16, 32, 64]
+    # Settings for origianl pdistal_width{width}batch200 trials
+    
+    # checkpoint_folder = '../trained_models/checkpoint/nav_poster_netstructure/'
+    # model_folder = ''../trained_models/nav_poster_netstructure/'
+    # data_folder = 'data/pdistal_rim_heatmap/'
+    # num_trials = 10
+    # widths = [2, 3, 4, 8, 16, 32, 64]
+    # for t in range(num_trials):
+    #     for width in widths:
+    #         trial_name = f'nav_pdistal_width{width}batch200'
+    #         collect_checkpoint_data(trial_name, t)
+    #         compute_heatmaps(trial_name, t)
+    #         compute_summary_stats(trial_name, t)
+    
+    
+    
+    # Settings for auxiliary task pdistal_widthaux
+    
+    num_trials = 3
+    widths = [16, 32, 64]
+    auxiliary_task_names = ['wall0', 'wall1', 'wall01', 'goaldist']
+    checkpoint_folder = '../trained_models/checkpoint/nav_pdistal_widthaux/'
+    data_folder = 'data/pdistal_widthaux_heatmap/'
+    model_folder = 'nav_pdistal_widthaux/'
     
     for t in range(num_trials):
         for width in widths:
-            collect_checkpoint_data(width, t)
-            compute_heatmaps(width, t)
-            compute_summary_stats(width, t)
+            for aux in auxiliary_task_names:
+                trial_name = f'nav_pdistal_width{width}aux{aux}'
+                collect_checkpoint_data(trial_name, t)
+                compute_heatmaps(trial_name, t)
+                compute_summary_stats(trial_name, t)
