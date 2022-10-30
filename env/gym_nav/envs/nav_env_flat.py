@@ -396,11 +396,15 @@ class NavEnvFlat(gym.Env):
         self.wall_colors = wall_colors
         self.goal_visible = goal_visible # Note: not used, visibility defined by
                                          # task structure at the moment
+        if type(goal_size) == list:
+            self.goal_size = np.array(goal_size)
         self.goal_size = goal_size
         self.goal_corner = goal_corner
         self.poster = poster
         self.num_rays = num_rays
         self.fov = fov
+        if type(fixed_reset[0]) == list:
+            fixed_reset[0] = np.array(fixed_reset[0])
         self.fixed_reset = fixed_reset
         self.character_reset_pos = character_reset_pos
         self.turn_speed = turn_speed
