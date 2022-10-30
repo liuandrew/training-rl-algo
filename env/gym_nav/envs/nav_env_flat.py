@@ -318,7 +318,7 @@ class NavEnvFlat(gym.Env):
                 task_structure=1, poster=False, auxiliary_tasks=[],
                 auxiliary_task_args=[], fixed_reset=[None, None],
                 character_reset_pos=0, turn_speed=0.2, move_speed=10,
-                num_actions=4, num_grid_slices=5):
+                num_actions=4, num_grid_slices=5, goal_size=20, goal_corner=None):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -338,6 +338,11 @@ class NavEnvFlat(gym.Env):
             2: invisible goal, fixed position
             3: invisible goal, randomize position of char and goal at start
                 try to reach the goal as many times as possible over fixed length episode
+            4: invisible target. Agent is told which grid the target is assigned to through a one-hot
+                encoding (pool divided into 5x5 grid of possible target cells). Every 40 timesteps the
+                location changes
+            5: same as 2 (invisible goal, fixed pos), but an additional action can be pressed to
+                end the episode. If the agent is on top of the platform, they get a reward on reset
         poster:
             whether there should be a poster and on which wall [0-3]
         auxiliary_tasks: (pass as list of tasks desired)
@@ -355,6 +360,10 @@ class NavEnvFlat(gym.Env):
             0: Old reset position - enforced to be 30 units away from walls and 50 from goal (corner)
                 This position was not what we wanted ideally, but many models trained on this env
             1: New reset position - enforced to be 3 units away from walls and 30 from goal (center)
+        goal_size: size of goal as int or array
+        goal_corner: array giving x and y position of bottom left corner. If None, use default world
+            generator function values
+        
         '''
         super(NavEnvFlat, self).__init__()
 
@@ -387,6 +396,8 @@ class NavEnvFlat(gym.Env):
         self.wall_colors = wall_colors
         self.goal_visible = goal_visible # Note: not used, visibility defined by
                                          # task structure at the moment
+        self.goal_size = goal_size
+        self.goal_corner = goal_corner
         self.poster = poster
         self.num_rays = num_rays
         self.fov = fov
@@ -415,9 +426,13 @@ class NavEnvFlat(gym.Env):
         if task_structure == 4:
             num_grid = self.num_grid_slices ** 2
             observation_width += num_grid + 1
+        
+        #Add action for task_structure 5 that allows the agent to end the episode
+        if task_structure == 5:
+            self.num_actions = self.num_actions + 1
 
         self.observation_space = spaces.Box(low=0, high=6, shape=(observation_width,))
-        self.action_space = spaces.Discrete(num_actions) #turn left, forward, right as actions
+        self.action_space = spaces.Discrete(self.num_actions) #turn left, forward, right as actions
         
         self.max_steps = max_steps
         self.current_steps = 0
@@ -468,6 +483,12 @@ class NavEnvFlat(gym.Env):
             self.character.rotate(self.turn_speed, self.vis_walls, self.vis_wall_refs)
         if action == 3:
             pass
+        if action == 4 and self.task_structure == 5:
+            #Perform action to state that agent is on the platform
+            on_goal = self.test_platform()
+            if on_goal:
+                reward = float(1)
+                done = True
 
         if self.rew_structure == 'dist':
             goal = self.boxes[-1]
@@ -487,6 +508,8 @@ class NavEnvFlat(gym.Env):
                 if self.task_structure <= 2:
                     done = True
                 else:
+                    #Note that character position is reset for task_structure 3 when colliding with
+                    #the platform even though episode is not reset
                     self.reset_character_position()
             else:
 #                 reward = -10
@@ -549,7 +572,7 @@ class NavEnvFlat(gym.Env):
         if start_angle is not None:
             self.character.angle = start_angle
         if self.task_structure == 4:
-            self.change_target_grid()    
+            self.change_target_grid()
         
         self.character.update_rays(self.vis_walls, self.vis_wall_refs)
         observation = self.get_observation()
@@ -705,13 +728,20 @@ class NavEnvFlat(gym.Env):
 
     def generate_world(self):
         wall_thickness = 1
-        goal_size = 20
+        
+        if type(self.goal_size) == int:
+            goal_size = [self.goal_size, self.goal_size]
+        elif type(self.goal_size) == list:
+            goal_size = self.goal_size
+        else:
+            goal_size = [20, 20]
+                    
         self.boxes, walls, wall_refs = self.make_walls(thickness=wall_thickness)
 
         if self.task_structure == 1:
             #generate a visible goal with random position
             corner = np.random.uniform(low=30, high=270, size=(2,))
-            goal = Box(corner, [goal_size, goal_size], color=6, is_goal=True)
+            goal = Box(corner, goal_size, color=6, is_goal=True)
             goal_walls, goal_wall_refs = self.get_walls([goal])
             self.vis_walls, self.vis_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
             self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
@@ -724,19 +754,31 @@ class NavEnvFlat(gym.Env):
             #     self.vis_walls, self.vis_wall_refs = walls, wall_refs
             #     self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
             # self.boxes.append(goal)
-        elif self.task_structure == 2:
-            corner = np.array([240, 60])
-            goal = Box(corner, [goal_size, goal_size], color=0, is_goal=True)            
+        elif self.task_structure == 2 or self.task_structure == 5:
+            if self.goal_corner == None:
+                corner = np.array([240, 60])
+            else:
+                corner = self.goal_corner
+            goal = Box(corner, goal_size, color=0, is_goal=True)            
             goal_walls, goal_wall_refs = self.get_walls([goal])
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
-            self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            
+            if self.task_structure == 2:
+                # For usual invisible fixed platform task, make the platform collidable
+                self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
+            elif self.task_structure == 5:
+                # For task where agent must take action when it thinks it is on goal, platform is not collidable
+                self.col_walls, self.col_wall_refs = walls, wall_refs
             self.boxes.append(goal)
             
         elif self.task_structure == 3:
             #generate randomly positioned invisible goal
             #min distance of 10 from the walls
-            corner = np.random.uniform(low=10, high=270, size=(2,))
-            goal = Box(corner, [goal_size, goal_size], color=0, is_goal=True)
+            if self.goal_corner == None:
+                corner = np.random.uniform(low=10, high=270, size=(2,))
+            else: 
+                corner = self.goal_corner
+            goal = Box(corner, goal_size, color=0, is_goal=True)
             goal_walls, goal_wall_refs = self.get_walls([goal])
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
             self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
@@ -760,7 +802,7 @@ class NavEnvFlat(gym.Env):
                     searching = False
             elif self.character_reset_pos == 1:
                 pos = np.random.uniform(low=wall_thickness+3, high=300-wall_thickness-3, size=(2,))
-                if dist((corner + [goal_size/2, goal_size/2]) - pos) > goal_size*1.5:
+                if dist((corner + [goal_size[0]/2, goal_size[1]/2]) - pos) > max(goal_size)*1.5:
                     searching = False
         angle = np.random.uniform(0, 2*np.pi)
         
@@ -776,20 +818,32 @@ class NavEnvFlat(gym.Env):
         # to reset character but not end episode after goal found
         searching = True
         goal_center = np.array(self.boxes[-1].center)
-        goal_size = 20
+        if type(self.goal_size) == int:
+            goal_size = [self.goal_size, self.goal_size]
+        elif type(self.goal_size) == list:
+            goal_size = self.goal_size
+        else:
+            goal_size = [20, 20]
         wall_thickness = 1
         
-        while searching:
-            # Old position randomizer - too much space away from goal
-            if self.character_reset_pos == 0:
-                pos = np.random.uniform(low=30, high=270, size=(2,))
-                if dist(goal_center - pos) > 50:
-                    searching = False
-            elif self.character_reset_pos == 1:
-                pos = np.random.uniform(low=wall_thickness+3, high=300-wall_thickness-3, size=(2,))
-                if dist(goal_center - pos) > goal_size*1.5:
-                    searching = False
-        angle = np.random.uniform(0, 2*np.pi)
+        
+        pos = self.fixed_reset[0].copy()
+        angle = self.fixed_reset[1]
+        if type(pos) == type(None):
+            while searching:
+                # Old position randomizer - too much space away from goal
+                if self.character_reset_pos == 0:
+                    pos = np.random.uniform(low=30, high=270, size=(2,))
+                    if dist(goal_center - pos) > 50:
+                        searching = False
+                elif self.character_reset_pos == 1:
+                    pos = np.random.uniform(low=wall_thickness+3, high=300-wall_thickness-3, size=(2,))
+                    if dist(goal_center - pos) > max(goal_size)*1.5:
+                        searching = False
+        
+        if angle == None:
+            angle = np.random.uniform(0, 2*np.pi)
+
         self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
         self.character.update_rays(self.vis_walls, self.vis_wall_refs)
 
@@ -883,6 +937,22 @@ class NavEnvFlat(gym.Env):
     def change_target_grid(self):
         num_grid = self.num_grid_slices ** 2
         self.target_grid = np.random.choice(np.arange(num_grid))
+        
+    def test_platform(self):
+        '''
+        Used for task_structure 5 where agent must perform action 4 when they think
+        they are on the platform. This function will test whether the agent is indeed on
+        the platform
+        '''
+        char_pos = self.character.pos
+        goal_pos = self.boxes[-1].center
+        goal_size = self.boxes[-1].size
+        
+        pos_diff = np.abs(char_pos - goal_pos)
+        return np.all(pos_diff <= goal_size)
+        
+        
+        
 
     def seed(self, seed=0):
         np.random.seed(seed)
