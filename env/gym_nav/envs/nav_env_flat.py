@@ -328,6 +328,7 @@ class NavEnvFlat(gym.Env):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
+                        'explore' - additional reward given for each section explored
         give_heading: whether to additionally give a distance and direction to goal
         flat: whether to give observations in a flattened state
         world_gen_func: a function can be passed to manually create a world
@@ -460,6 +461,8 @@ class NavEnvFlat(gym.Env):
         self.col_walls = []
         self.col_wall_refs = []
 
+        self.visited_sections = np.zeros((num_grid_slices, num_grid_slices,))
+
 
         if self.world_gen_func is None:
             self.generate_world()
@@ -507,6 +510,25 @@ class NavEnvFlat(gym.Env):
             dist_to_goal = self.sub_goal_reward * \
                 (MAX_LEN-dist(goal.center - self.character.pos)) / MAX_LEN
             reward = float(dist_to_goal)
+        elif self.rew_structure == 'explore': 
+            x_grids = np.linspace(0, WINDOW_SIZE[0], self.num_grid_slices+1)
+            y_grids = np.linspace(0, WINDOW_SIZE[1], self.num_grid_slices+1)
+            x = self.character.pos[0]
+            y = self.character.pos[1]
+            x_where = np.argwhere(x < x_grids)
+            y_where = np.argwhere(y < y_grids)
+            if len(x_where) > 0:
+                x_grid = x_where[0] - 1
+            else:
+                x_grid = self.num_grid_slices - 1
+            if len(y_where) > 0:
+                y_grid = y_where[0] - 1
+            else:
+                y_grid = self.num_grid_slices - 1
+            
+            if self.visited_sections[x_grid, y_grid] == 0:
+                self.visited_sections[x_grid, y_grid] = 1
+                reward += self.sub_goal_reward
 
             
         if collision_obj != None:
@@ -538,8 +560,8 @@ class NavEnvFlat(gym.Env):
             y_grid = self.target_grid % self.num_grid_slices
             x_low = x_grid * WINDOW_SIZE[0] / self.num_grid_slices
             x_high = (x_grid + 1) * WINDOW_SIZE[0] / self.num_grid_slices
-            y_low = y_grid * WINDOW_SIZE[0] / self.num_grid_slices
-            y_high = (y_grid + 1) * WINDOW_SIZE[0] / self.num_grid_slices
+            y_low = y_grid * WINDOW_SIZE[1] / self.num_grid_slices
+            y_high = (y_grid + 1) * WINDOW_SIZE[1] / self.num_grid_slices
             if x_low <= pos[0] <= x_high and y_low <= pos[1] <= y_high:
                 reward = float(1)
             
@@ -591,6 +613,9 @@ class NavEnvFlat(gym.Env):
         self.initial_character_position = self.character.pos.copy()
         self.current_steps = 0
         self.total_rewards = 0
+        
+        self.visited_sections = np.zeros((self.num_grid_slices, self.num_grid_slices,))
+        
         return observation
 
     
@@ -608,7 +633,7 @@ class NavEnvFlat(gym.Env):
             x_grid = int(np.floor(self.target_grid / self.num_grid_slices))
             y_grid = self.target_grid % self.num_grid_slices
             x_low = x_grid * WINDOW_SIZE[0] / self.num_grid_slices
-            y_low = y_grid * WINDOW_SIZE[0] / self.num_grid_slices
+            y_low = y_grid * WINDOW_SIZE[1] / self.num_grid_slices
             x_size = WINDOW_SIZE[0] / self.num_grid_slices
             y_size = WINDOW_SIZE[1] / self.num_grid_slices
             corner = np.array([x_low, y_low])
