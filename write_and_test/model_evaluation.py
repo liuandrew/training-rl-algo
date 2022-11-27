@@ -209,7 +209,8 @@ def load_checkpoint(experiment, checkpoint=None, base_folder='../trained_models/
 
 
 def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
-          data_callback=None, capture_video=False, verbose=0, with_activations=False):
+          data_callback=None, capture_video=False, verbose=0, with_activations=False,
+          seed=1, deterministic=True):
     '''
     Evaluate using the current global model, obs_rms, and env_kwargs
     Load ep_ends, ep_lens into global vars to be used by get_ep
@@ -222,9 +223,9 @@ def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
         2: print rewards for each episode
     '''
     
-    results = evaluate(model, obs_rms, env_name, 1, 1, eval_log_dir, device, 
+    results = evaluate(model, obs_rms, env_name, seed, 1, eval_log_dir, device, 
          env_kwargs=env_kwargs, data_callback=data_callback, num_episodes=n, capture_video=capture_video,
-         verbose=verbose, with_activations=with_activations)
+         verbose=verbose, with_activations=with_activations, deterministic=deterministic)
 
     #ep_ends and ep_lens used to easily pull data for single episodes
     results['ep_ends'] = np.where(np.array(results['dones']).flatten())[0]

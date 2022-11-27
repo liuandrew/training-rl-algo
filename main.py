@@ -165,7 +165,7 @@ def main():
     print('initializing environments')
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False, capture_video=args.capture_video,
-                         env_kwargs=args.env_kwargs)
+                         env_kwargs=args.env_kwargs, **args.aux_wrapper_kwargs)
 
     loaded_model = False
     # print(args.cont)
@@ -401,6 +401,7 @@ def main():
             ], save_path)
 
         # Andy: if checkpointing, save every interval-th episode
+        # Note that 0th update is actually the 1st update, because this comes after update code
         if args.checkpoint_interval > 0 and (j % args.checkpoint_interval == 0 or j == num_updates - 1):
             torch.save([
                 actor_critic,

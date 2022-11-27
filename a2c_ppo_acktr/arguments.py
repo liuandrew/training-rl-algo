@@ -231,6 +231,10 @@ def get_args():
     parser.add_argument('--nn-base-kwargs', nargs='*', action=ParseKwargs, default={},
         help='pass kwargs for the NNBase, such as how many shared layers')
 
+    #Andy: add options for AuxVecPyTorch wrapper that can add auxiliary task
+    parser.add_argument('--aux-wrapper-kwargs', nargs='*', action=ParseKwargs, default={},
+        help='pass kwargs for AuxVecPyTorch, mainly options for auxiliary tasks')
+    
     #Andy: add auxiliary loss weight. In the future, we may want to adjust this
     #   so that we can use a different weighting per task
     parser.add_argument('--auxiliary-loss-coef', type=float, default=0.3,

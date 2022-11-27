@@ -88,15 +88,15 @@ class Character:
             self.rays[i].update(start=self.pos, angle=fov_start + i*self.ray_splits, vis_walls=vis_walls, vis_wall_refs=vis_wall_refs)
             
             
-    def draw_rays(self):
+    def draw_rays(self, ax=None):
         '''
         draw the rays coming from character
         '''
         for ray in self.rays:
-            ray.draw()
+            ray.draw(ax=ax)
         
     
-    def draw(self):
+    def draw(self, ax=None):
         '''
         draw the character
         '''
@@ -109,11 +109,14 @@ class Character:
         draw_color = idx_to_rgb[self.color]
         
         poly = plt.Polygon([point1, point2, point3], fc=draw_color)
-        plt.gca().add_patch(poly)
+        if ax == None:
+            plt.gca().add_patch(poly)
+        else:
+            ax.add_patch(poly)
 
         
         if self.render_rays:
-            self.draw_rays()
+            self.draw_rays(ax=ax)
         
         
     def move(self, speed, col_walls, col_wall_refs, vis_walls, vis_wall_refs):
@@ -274,11 +277,14 @@ class Ray():
         else:
             return min_dist, vis_wall_refs[min_idx]
     
-    def draw(self):
+    def draw(self, ax=None):
         rect = plt.Rectangle(self.start, self.obj_dist, 1, self.angle * 180 / np.pi, fc=idx_to_rgb[self.color])
 
         draw_color = idx_to_rgb[self.color]
-        plt.gca().add_patch(rect)
+        if ax == None:
+            plt.gca().add_patch(rect)
+        else:
+            ax.add_patch(rect)
         # plt.scatter([self.start[0]+self.obj_dist*math.cos(self.angle)], [self.start[1]+self.obj_dist*math.sin(self.angle)])
         
             
@@ -349,6 +355,8 @@ class NavEnvFlat(gym.Env):
             'null': task to output constant 0
             'euclidean_start': task to output euclidean distance travelled from start of episode
             'wall_direction': task to output relative degrees required to face a certain wall
+            'terminal': task to output expected number of steps to episode end
+                weighted by average episode length
         auxiliary_task_args: (pass as a list of arguments)
             'null': None (might later implement task to output n values)
             'euclidean_start': None
@@ -586,15 +594,16 @@ class NavEnvFlat(gym.Env):
         return observation
 
     
-    def render(self, mode='rgb_array'):
-        plt.style.use('dark_background')
-        fig = plt.figure(figsize=(6,6))
-        plt.xlim([0, WINDOW_SIZE[0]])
-        plt.ylim([0, WINDOW_SIZE[1]])
+    def render(self, mode='rgb_array', ax=None):
+        if ax == None:
+            plt.style.use('dark_background')
+            fig = plt.figure(figsize=(6,6))
+            plt.xlim([0, WINDOW_SIZE[0]])
+            plt.ylim([0, WINDOW_SIZE[1]])
 
-        self.character.draw()
+        self.character.draw(ax=ax)
         for box in self.boxes:
-            box.draw()
+            box.draw(ax=ax)
         if self.task_structure == 4:
             x_grid = int(np.floor(self.target_grid / self.num_grid_slices))
             y_grid = self.target_grid % self.num_grid_slices
@@ -605,11 +614,8 @@ class NavEnvFlat(gym.Env):
             corner = np.array([x_low, y_low])
             size = np.array([x_size, y_size])
             grid_box = Box(corner, size, color=6, is_goal=True)
-            grid_box.draw()
+            grid_box.draw(ax=ax)
         
-        fig.canvas.draw()
-        image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         #trim borders
         # image_from_plot = image_from_plot[52:380,52:390,:]
         
@@ -620,10 +626,13 @@ class NavEnvFlat(gym.Env):
         # w, h = fig.canvas.get_width_height()
         # im = data.reshape((int(h), int(w), -1))
         
-        if mode == 'human':
+        if mode == 'human' and ax == None:
             plt.show()
             
         if mode == 'rgb_array':
+            fig.canvas.draw()
+            image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
             plt.close()
             return image_from_plot
             
@@ -725,6 +734,7 @@ class NavEnvFlat(gym.Env):
                 goal_dist = goal_dist / MAX_LEN
                 output = [goal_dist]
                 auxiliary_output += output
+                
                 
         return np.array(auxiliary_output)
     

@@ -21,6 +21,19 @@ num_clusters = 9
 
 def gaussian_smooth(pos, y, extent=(5, 295), num_grid=30, sigma=10,
                     ret_hasval=False):
+    """Convert a list of positions and values to a smoothed heatmap
+
+    Args:
+        pos (): _description_
+        y (_type_): _description_
+        extent (tuple, optional): _description_. Defaults to (5, 295).
+        num_grid (int, optional): _description_. Defaults to 30.
+        sigma (int, optional): _description_. Defaults to 10.
+        ret_hasval (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        _type_: _description_
+    """
     # a = stacked['shared_activations'][0, :, 0].numpy()
     y = np.array(y)
     
@@ -51,7 +64,23 @@ def gaussian_smooth(pos, y, extent=(5, 295), num_grid=30, sigma=10,
 def clean_eps(eps, prune_first=5, activations_key='shared_activations',
              activations_layer=0, clip=False,
              save_inview=True, save_seen=True):
-    '''Clean up an eps data dictionary collected from evalu for heatmapping'''
+    """Prepare a list of episode data to be used for Gaussian heatmapping
+    For clustering we have been using prun_first=0, save_inview=False, save_seen=False
+
+    Args:
+        eps (dict): eps dictionary, often from stack_all_ep(all_ep)
+        prune_first (int, optional): How many first steps of each episode to remove. Defaults to 5.
+        activations_key (str, optional): Which set of activations to save. Defaults to 'shared_activations'.
+        activations_layer (int, optional): Which layer of activations to save. Defaults to 0.
+            E.g., could use activations_key='actor_activations', activations_layer=1
+        clip (bool, optional): Whether to only keep non-negative activation values. Defaults to False.
+        save_inview (bool, optional): Whether to add to return dict the steps where poster is in view. Defaults to True.
+        save_seen (bool, optional): Whether to add to return dict the steps where poster has been seen. 
+            Defaults to True.
+
+    Returns:
+        dict: eps ready for conversion to heatmap
+    """
     dones = eps['dones'].copy()
     pos = np.vstack(eps['data']['pos'])
     stacked = stack_activations(eps['activations'])
@@ -130,6 +159,12 @@ def stack_all_ep(all_ep):
     When making a list of results from multiple evalu calls,
     this function can be called to put the relevant data into a single dict to be
     passed to clean_eps for processing
+    
+    E.g.
+    all_ep = []
+    for i in range(10):
+        all_ep.append(forced_action_evaluate(...))
+    eps = stack_all_ep(all_ep)
     '''
     dones = np.concatenate([ep['dones'] for ep in all_ep])
     pos = np.vstack([ep['data']['pos'] for ep in all_ep])
@@ -157,6 +192,16 @@ def stack_all_ep(all_ep):
 
     
 def split_by_angle(target, angles):
+    """Split a list of data (targets) into slices depending on what angle quadrant
+    it was associated with. 
+
+    Args:
+        target (list, np.array): List of data to be split
+        angles (list, np.array): List of angles to split target data into quadrant by
+
+    Returns:
+        dict: target data split into quadrants 0, 1, 2, 3
+    """
     splits = {
         0: [-np.pi/4, np.pi/4],
         1: [np.pi/4, 3*np.pi/4],
@@ -267,49 +312,30 @@ def count_labels(clabels, ignore_cluster=None, remove_zeros=False):
 
 
 
-'''
-Setup points and trajectories
-'''
-combined_actions, keep_start_points, keep_start_angles = pickle.load(open(f'data/pdistal_rim_heatmap/width64_comb_acts', 'rb'))
 
-#Starting around rim - First generate start points and angles
-WINDOW_SIZE = (300, 300)
-step_size = 10.
-xs = np.arange(0+step_size, WINDOW_SIZE[0], step_size)
-ys = np.arange(0+step_size, WINDOW_SIZE[1], step_size)
-# thetas = np.linspace(0, 2*np.pi, 12, endpoint=False)
-start_points = []
-start_angles = []
-for x in xs:
-    for y in [5., 295.]:
-        point = np.array([x, y])
-        angle = np.arctan2(150 - y, 150 - x)
-        start_points.append(point)
-        start_angles.append(angle)
-for y in ys:
-    for x in [5, 295]:
-        point = np.array([x, y])
-        angle = np.arctan2(150 - y, 150 - x)
-        start_points.append(point)
-        start_angles.append(angle)
-        
-start_points = np.vstack(start_points)
+def collect_checkpoint_data(trial_name, trial, data_folder='data/pdistal_widthaux_heatmap/',
+                            checkpoint_folder='../trained_models/checkpoint/nav_pdistal_widthaux/',
+                            model_folder='nav_pdistal_widthaux/',
+                            checkpoints=None):
+    """Given an experimental trial_name and trial, load saved checkpoints and collect
+    forced trajectory and natural trajectory data to 
 
-
-
-
-
-def collect_checkpoint_data(trial_name, trial):
+    Args:
+        trial_name (_type_): _description_
+        trial (_type_): _description_
+        data_folder (str, optional): _description_. Defaults to 'data/pdistal_widthaux_heatmap/'.
+        checkpoint_folder (str, optional): _description_. Defaults to '../trained_models/checkpoint/nav_pdistal_widthaux/'.
+        model_folder (str, optional): _description_. Defaults to 'nav_pdistal_widthaux/'.
+    """
     print(f'Collecting trajectory data for {trial_name}:{trial}')
     start_time = time.time()
     
     path = checkpoint_folder + f'{trial_name}_t{trial}'
     # Get env_kwargs
-    model_name = f'{model_folder}{trial_name}'
-    print(model_name)
-    _, _, kwargs = load_model_and_env(model_name, trial)
-
-    checkpoints = list(Path(path).iterdir())
+    kwargs_name = f'../trained_models/ppo/{model_folder}{trial_name}_env'
+    # print(model_name)
+    # _, _, kwargs = load_model_and_env(model_name, trial)
+    kwargs = pickle.load(open(kwargs_name, 'rb'))
 
     save_path = data_folder + f'{trial_name}_checkpoint'
     if not Path(save_path).exists():
@@ -326,13 +352,17 @@ def collect_checkpoint_data(trial_name, trial):
         print('Already completed, skipping')
         return
 
+    if checkpoints == None:
+        checkpoints = list(Path(path).iterdir())
+        checkpoints = [int(chk.name.split('.pt')[0]) for chk in checkpoints]
+
     with torch.no_grad():
-        for checkpoint in tqdm(checkpoints):
-            chkp_val = int(checkpoint.name.split('.pt')[0])
+        for chkp_val in tqdm(checkpoints):
             if chkp_val in checkpoint_data['policy'][trial]:
                 #already ran this checkpoint
                 continue
-
+            
+            checkpoint = Path(path)/f'{chkp_val}.pt'
             model, obs_rms = torch.load(checkpoint)
 
             #Generate copied activations
@@ -341,7 +371,7 @@ def collect_checkpoint_data(trial_name, trial):
                 copied_actions = lambda step: combined_actions[i][step]
                 kw = kwargs.copy()
                 kw['fixed_reset'] = [keep_start_points[i].copy(), keep_start_angles[i].copy()]
-                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, 
+                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, eval_log_dir='./',
                                             env_kwargs=kw, data_callback=poster_data_callback,
                                             with_activations=True, forced_actions=copied_actions)
                 all_ep.append(ep)
@@ -355,7 +385,7 @@ def collect_checkpoint_data(trial_name, trial):
             for i in range(len(start_points)):
                 kw = kwargs.copy()
                 kw['fixed_reset'] = [start_points[i].copy(), start_angles[i].copy()]
-                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, 
+                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, eva
                                             env_kwargs=kw, data_callback=poster_data_callback,
                                             with_activations=True)
                 all_ep.append(ep)
@@ -369,7 +399,7 @@ def collect_checkpoint_data(trial_name, trial):
     print('Wall time:', round(end_time-start_time, 2))
         
 
-def compute_heatmaps(trial_name, trial):
+def compute_heatmaps(trial_name, trial, data_folder='data/pdistal_widthaux_heatmap/'):
     print(f'Computing heatmaps for {trial_name}:{trial}')
     start_time = time.time()
     
@@ -408,7 +438,7 @@ def compute_heatmaps(trial_name, trial):
 
 
 
-def compute_summary_stats(trial_name, trial):
+def compute_summary_stats(trial_name, trial, data_folder='data/pdistal_widthaux_heatmap/'):
     print(f'Compute summary stats for width {trial_name}:{trial}')
     start_time = time.time()
     
@@ -469,7 +499,40 @@ def compute_summary_stats(trial_name, trial):
     print('Wall time:', round(end_time-start_time, 2))
 
 
+
 if __name__ == '__main__':
+    '''
+    Setup points and trajectories
+
+    combined_actions, keep_start_points, keep_start_angles used for
+        forced trajectories
+    start_points, start_angles used for natural policies
+    '''
+    combined_actions, keep_start_points, keep_start_angles = pickle.load(open(f'data/pdistal_rim_heatmap/width64_comb_acts', 'rb'))
+
+    #Starting around rim - First generate start points and angles
+    WINDOW_SIZE = (300, 300)
+    step_size = 10.
+    xs = np.arange(0+step_size, WINDOW_SIZE[0], step_size)
+    ys = np.arange(0+step_size, WINDOW_SIZE[1], step_size)
+    # thetas = np.linspace(0, 2*np.pi, 12, endpoint=False)
+    start_points = []
+    start_angles = []
+    for x in xs:
+        for y in [5., 295.]:
+            point = np.array([x, y])
+            angle = np.arctan2(150 - y, 150 - x)
+            start_points.append(point)
+            start_angles.append(angle)
+    for y in ys:
+        for x in [5, 295]:
+            point = np.array([x, y])
+            angle = np.arctan2(150 - y, 150 - x)
+            start_points.append(point)
+            start_angles.append(angle)
+            
+    start_points = np.vstack(start_points)
+    
     # Settings for origianl pdistal_width{width}batch200 trials
     
     # checkpoint_folder = '../trained_models/checkpoint/nav_poster_netstructure/'
@@ -486,19 +549,50 @@ if __name__ == '__main__':
     
     
     
-    # Settings for auxiliary task pdistal_widthaux
+    # # Settings for auxiliary task pdistal_widthaux
+    # num_trials = 3
+    # widths = [16, 32, 64]
+    # auxiliary_task_names = ['wall0', 'wall1', 'wall01', 'goaldist']
+    # checkpoint_folder = '../trained_models/checkpoint/nav_pdistal_widthaux/'
+    # data_folder = 'data/pdistal_widthaux_heatmap/'
+    # model_folder = 'nav_pdistal_widthaux/'
     
+    # for t in range(num_trials):
+    #     for width in widths:
+    #         for aux in auxiliary_task_names:
+    #             trial_name = f'nav_pdistal_width{width}aux{aux}'
+    #             collect_checkpoint_data(trial_name, t, data_folder=data_folder,
+    #                                     checkpoint_folder=checkpoint_folder,
+    #                                     model_folder=model_folder)
+    #             compute_heatmaps(trial_name, t, data_folder=data_folder)
+    #             compute_summary_stats(trial_name, t, data_folder=data_folder)
+                
+                
+    # Settings for auxiliary task pdistal_width16batchaux
     num_trials = 3
-    widths = [16, 32, 64]
-    auxiliary_task_names = ['wall0', 'wall1', 'wall01', 'goaldist']
-    checkpoint_folder = '../trained_models/checkpoint/nav_pdistal_widthaux/'
-    data_folder = 'data/pdistal_widthaux_heatmap/'
-    model_folder = 'nav_pdistal_widthaux/'
+    # widths = [16, 32, 64]
+    batch_sizes = [8, 16, 32, 64, 96, 128]
+    checkpoints = [
+        [0, 320, 640, 960, 1280, 1600, 1920, 2240, 2560, 2880, 3200, 3749],
+        [0, 160, 320, 480, 640, 800, 960, 1120, 1280, 1440, 1600, 1760, 1874],
+        [0, 80, 160, 240, 320, 400, 480, 560, 640, 720, 800, 880, 936],
+        [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 467],
+        [0, 30, 60, 80, 110, 140, 170, 200, 220, 250, 280, 300, 311],
+        [0, 20, 40, 80, 100, 120, 140, 160, 180, 200, 220, 233],
+    ]
+    
+    auxiliary_task_names = ['wall0', 'wall1', 'wall01', 'goaldist', 'none']
+    checkpoint_folder = '../trained_models/checkpoint/nav_pdistal_batchaux/'
+    data_folder = 'data/pdistal_batchaux_heatmap/'
+    model_folder = 'nav_pdistal_batchaux/'
     
     for t in range(num_trials):
-        for width in widths:
+        for n, batch in enumerate(batch_sizes):
             for aux in auxiliary_task_names:
-                trial_name = f'nav_pdistal_width{width}aux{aux}'
-                collect_checkpoint_data(trial_name, t)
-                compute_heatmaps(trial_name, t)
-                compute_summary_stats(trial_name, t)
+                trial_name = f'nav_pdistal_batch{batch}aux{aux}'
+                collect_checkpoint_data(trial_name, t, data_folder=data_folder,
+                                        checkpoint_folder=checkpoint_folder,
+                                        model_folder=model_folder,
+                                        checkpoints=checkpoints[n])
+                compute_heatmaps(trial_name, t, data_folder=data_folder)
+                compute_summary_stats(trial_name, t, data_folder=data_folder)

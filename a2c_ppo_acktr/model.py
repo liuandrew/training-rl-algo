@@ -420,6 +420,7 @@ class FlexBase(NNBase):
           side: 0:actor or 1:critic, -1: if we expect to be on shared layers
           output: gym.spaces.Discrete, gym.spaces.Box, or int representing output dimension for linear output)]
         
+    conv1d_layers: how many of these conv1d layers we should use
 
     !IMPORTANT - to use Gym distributions and such, we will need to adjust code further
         specifically looking into allowing to pass the predicted outputs in 
@@ -430,7 +431,8 @@ class FlexBase(NNBase):
         tasks yet
     '''
     def __init__(self, num_inputs, recurrent=True, hidden_size=64,
-                num_layers=2, num_shared_layers=0, auxiliary_heads=[]):
+                num_layers=2, num_shared_layers=0, auxiliary_heads=[],
+                conv1d_layers=0):
         super(FlexBase, self).__init__(recurrent, num_inputs, hidden_size)
         
         self.num_layers = num_layers
@@ -448,6 +450,7 @@ class FlexBase(NNBase):
         self.shared_layers = []
         self.critic_layers = []
         self.actor_layers = []
+        self.conv1d_layers = []
         
         # generate all the shared layers
         cur_shared_layers = 0

@@ -7,7 +7,7 @@ from a2c_ppo_acktr.envs import make_vec_envs
 
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
              device, ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
-             num_episodes=10, verbose=0, with_activations=False):
+             num_episodes=10, verbose=0, with_activations=False, deterministic=True):
     '''
     ret_info: level of info that should be tracked and returned
     capture_video: whether video should be captured for episodes
@@ -48,6 +48,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     all_dones = []
     all_masks = []
     all_activations = []
+    all_values = []
+    all_actor_features = []
     data = {}
 
     obs = eval_envs.reset()
@@ -64,7 +66,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
             #     deterministic=True)
             
             outputs = actor_critic.act(obs, eval_recurrent_hidden_states, 
-                                       eval_masks, deterministic=True,
+                                       eval_masks, deterministic=deterministic,
                                        with_activations=with_activations)
             action = outputs['action']
             eval_recurrent_hidden_states = outputs['rnn_hxs']
@@ -83,6 +85,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         all_hidden_states.append(eval_recurrent_hidden_states)
         all_dones.append(done)
         all_masks.append(eval_masks)
+        all_values.append(outputs['value'])
+        all_actor_features.append(outputs['actor_features'])
         
         if with_activations:
             all_activations.append(outputs['activations'])
@@ -116,6 +120,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         'envs': eval_envs,
         'data': data,
         'activations': all_activations,
+        'values': all_values,
+        'actor_features': all_actor_features,
     }
 
 

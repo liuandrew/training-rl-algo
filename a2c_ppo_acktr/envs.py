@@ -16,6 +16,7 @@ from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,
                                               VecEnvWrapper)
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
+from collections import deque
 
 try:
     import dmc2gym
@@ -102,7 +103,9 @@ def make_vec_envs(env_name,
                   allow_early_resets,
                   num_frame_stack=None,
                   capture_video=False,
-                  env_kwargs={}):
+                  env_kwargs={},
+                  auxiliary_tasks=[],
+                  auxiliary_task_args=[]):
     envs = [
         make_env(env_name, seed, i, log_dir, allow_early_resets, capture_video,
                 env_kwargs)
@@ -120,7 +123,8 @@ def make_vec_envs(env_name,
         else:
             envs = VecNormalize(envs, gamma=gamma)
 
-    envs = VecPyTorch(envs, device)
+    # envs = VecPyTorch(envs, device)
+    envs = AuxVecPyTorch(envs, device, auxiliary_tasks, auxiliary_task_args)
 
     if num_frame_stack is not None:
         envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
@@ -178,6 +182,73 @@ class TransposeImage(TransposeObs):
 
     def observation(self, ob):
         return ob.transpose(self.op[0], self.op[1], self.op[2])
+
+
+#Andy: Create a new Auxiliary Task env wrapper that can add auxiliary outputs
+# through wrapper, so these are environment independent (although may require that
+# some quantities are available in the environment). 
+class AuxVecPyTorch(VecEnvWrapper):
+    def __init__(self, venv, device, auxiliary_tasks=[], auxiliary_task_args=[]):
+        """Return only every `skip`-th frame"""
+        super(AuxVecPyTorch, self).__init__(venv)
+        self.device = device
+        
+        available_auxiliary_tasks = {
+            'terminal': 1
+        }
+        auxiliary_task_to_idx = {
+            'terminal': 0
+        }
+        
+        self.auxiliary_tasks = []
+        self.auxiliary_task_args = auxiliary_task_args
+        for task in auxiliary_tasks:
+            if type(task) == int:
+                self.auxiliary_tasks.append(task)
+            elif task not in available_auxiliary_tasks.keys():
+                raise NotImplementedError('Auxiliary task {} not found. Available options are '.format(
+                    task, ', '.join(available_auxiliary_tasks.keys())))
+            else:
+                self.auxiliary_tasks.append(auxiliary_task_to_idx[task])
+
+        self.episode_lengths = deque(maxlen=200)
+        self.episode_lengths.append(200)
+
+    def reset(self):
+        obs = self.venv.reset()
+        obs = torch.from_numpy(obs).float().to(self.device)
+        return obs
+
+    def step_async(self, actions):
+        if isinstance(actions, torch.LongTensor):
+            # Squeeze the dimension for discrete actions
+            actions = actions.squeeze(1)
+        actions = actions.cpu().numpy()
+        self.venv.step_async(actions)
+
+    def step_wait(self):
+        obs, reward, done, info = self.venv.step_wait()
+        obs = torch.from_numpy(obs).float().to(self.device)
+        reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
+        
+        
+        for t, task in enumerate(self.auxiliary_tasks):
+            #Note we assume that 'current_steps' is an attribute of the
+            # environment. We could rewrite this so that the wrapper itself
+            # keeps track of step counts so it becomes fully environment independent
+            if task == 0:
+                steps = self.venv.get_attr('current_steps')
+                mean_steps = np.mean(self.episode_lengths)
+                for n, i in enumerate(info):
+                    if 'episode' in i.keys():
+                        self.episode_lengths.append(i['episode']['l'])
+                    if 'auxiliary' in i.keys():
+                        i['auxiliary'] = np.append(i['auxiliary'], [steps[n]/mean_steps])
+                    else:
+                        i['auxiliary'] = np.array([steps[n]/mean_steps])
+        
+        
+        return obs, reward, done, info
 
 
 class VecPyTorch(VecEnvWrapper):
