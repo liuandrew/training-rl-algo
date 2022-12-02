@@ -37,6 +37,17 @@ class ParseKwargs(argparse.Action):
                 value = literal_eval(value)
 
             getattr(namespace, self.dest)[key] = value
+            
+            
+def strtobool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 
@@ -216,7 +227,8 @@ def get_args():
     #Andy: parser.add_argument('--env-kwargs', type=json.loads, default=None,
     #     help='pass kwargs for environment given as json string')
     parser.add_argument('--env-kwargs', nargs='*', action=ParseKwargs, default=None)
-
+    parser.add_argument('--normalize-env', type=lambda x:bool(strtobool(x)), default=True, nargs='?', const=False,
+                        help='if toggled, turn off normalization in environment wrapper')
     parser.add_argument('--cont', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
         help='if toggled, attempt to load a model as named from save_path under the right folder to continue experiment')
 

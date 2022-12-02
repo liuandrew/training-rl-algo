@@ -163,9 +163,12 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
     print('initializing environments')
+    #Andy: Add option to turn off environment normalization
+    print('Normalize Env:', args.normalize_env)
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False, capture_video=args.capture_video,
-                         env_kwargs=args.env_kwargs, **args.aux_wrapper_kwargs)
+                         env_kwargs=args.env_kwargs, normalize=args.normalize_env,
+                         **args.aux_wrapper_kwargs)
 
     loaded_model = False
     # print(args.cont)

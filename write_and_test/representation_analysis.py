@@ -382,7 +382,7 @@ def prune_fail_episodes(targets, dones):
 
 def split_by_ep(targets, dones):
     '''
-    Similar to prune_fail_episodes, use dones to split a
+    Similar to prune_fail_episodes, use targets=dones to split a
     recorded set of values from evaluation by episodes
     '''
     done_idxs = np.where(np.vstack(dones))[0]

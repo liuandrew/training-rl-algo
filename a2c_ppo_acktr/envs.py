@@ -103,6 +103,7 @@ def make_vec_envs(env_name,
                   allow_early_resets,
                   num_frame_stack=None,
                   capture_video=False,
+                  normalize=True,
                   env_kwargs={},
                   auxiliary_tasks=[],
                   auxiliary_task_args=[]):
@@ -117,7 +118,7 @@ def make_vec_envs(env_name,
     else:
         envs = DummyVecEnv(envs)
 
-    if len(envs.observation_space.shape) == 1:
+    if len(envs.observation_space.shape) == 1 and normalize:
         if gamma is None:
             envs = VecNormalize(envs, norm_reward=False)
         else:
