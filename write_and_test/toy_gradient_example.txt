@@ -1,0 +1,96 @@
+import torch
+
+'''
+Modifiable
+s_traj: collection of [s1, s2, s3] (states that were "collected")
+a_traj: collection of [a1, a2, a3] (actions that were "taken")
+r1, r2: rewards given for each action under "green" and "red" light
+r1_bonus, r2_bonus: auxiliary rewards for each action under "green" and "red" light
+'''
+
+w = torch.tensor([0.3, 0.1, -0.4], requires_grad=True)
+
+# #Trajectories Set 1
+# s_traj = [1, -1, 1]
+# a_traj = [1, 1, -1]
+
+# Trajectories Set 2
+# 
+s_traj = [1, -1, 1]
+a_traj = [1, 0, -1]
+
+# Set rewards for each action. r1 are the rewards if state=1, r2 are rewards if state=-1
+#   rewards in order of [go, do nothing, stop]
+r1 = torch.tensor([1., 0, -1.])
+r2 = torch.tensor([-1., 0, 1.])
+
+r1_bonus = torch.tensor([0, 0.1, 0])
+r2_bonus = torch.tensor([0, 0.1, 0])
+
+
+'''
+Fixed Computations
+'''
+r1_total = r1 + r1_bonus
+r2_total = r2 + r2_bonus
+pi1 = torch.exp(w*1) / (torch.sum(torch.exp(w*1)))
+pi2 = torch.exp(w*-1) / (torch.sum(torch.exp(w*-1)))
+v1 = torch.dot(pi1, r1_total).detach().item()
+v2 = torch.dot(pi2, r2_total).detach().item()
+
+print(f'V(1) = {v1}, V(-1) = {v2}')
+w.grad = torch.zeros(3)
+print('Computing Full Grad')
+for s, a in zip(s_traj, a_traj):
+    # Convert actions to indexes
+    if a == 1:
+        a_idx = 0
+    elif a == 0:
+        a_idx = 1
+    elif a == -1:
+        a_idx = 2
+        
+    if s == 1:
+        r = r1_total[a_idx]
+        adv = r - v1
+    else:
+        r = r2_total[a_idx]
+        adv = r - v2
+    adv = adv.item()
+    pi = torch.exp(w*s) / (torch.sum(torch.exp(w*s)))
+
+    print(f'Advantage: ', adv)
+    
+    # Compute partial derivatives multiplied by advantage
+    (pi[a_idx] * adv).backward()
+g1 = w.grad
+print('Full Grad: ', g1, '\n')
+
+w.grad = torch.zeros(3)
+print('Computing Bonus Only Grad')
+for s, a, r in zip(s_traj, a_traj, r_bonus_traj):
+    # Convert actions to indexes
+    if a == 1:
+        a_idx = 0
+    elif a == 0:
+        a_idx = 1
+    elif a == -1:
+        a_idx = 2
+        
+    if s == 1:
+        r = r1_bonus[a_idx]
+        adv = r - v1
+    else:
+        r = r2_bonus[a_idx]
+        adv = r - v2
+    adv = adv.item()
+    pi = torch.exp(w*s) / (torch.sum(torch.exp(w*s)))
+    
+    print(f'Advantage: ', adv)
+    
+    (pi[a_idx] * adv).backward()
+g2 = w.grad
+print('Bonus Only Grad: ', g2, '\n')
+
+cs = torch.nn.CosineSimilarity(dim=0)
+print('Cosine Similarity: ', cs(g1, g2).item())

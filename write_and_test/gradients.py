@@ -1,7 +1,7 @@
 import sys
 sys.path.append('..')
 from a2c_ppo_acktr import algo, utils
-from a2c_ppo_acktr.algo import PPO
+from a2c_ppo_acktr.algo.ppo import PPO, PPOAux
 import gym
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from read_experiments import *
 from model_evaluation import *
 
-from a2c_ppo_acktr.storage import RolloutStorage
+from a2c_ppo_acktr.storage import RolloutStorage, RolloutStorageAux
 from a2c_ppo_acktr.envs import make_vec_envs
 from  a2c_ppo_acktr.model import Policy
 import torch
@@ -44,7 +44,8 @@ res = collect_batches_and_grads(agent, envs, storage, num_batches=10, decompose_
 cos_sims = aux_cos_sim_grad(res['all_grads'])
 """
 
-def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, deterministic=False):
+def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, deterministic=False,
+                      data_callback=None):
     """Subfunction used by collect_batches_and_grads
     
     Pass a model with envs and rollouts object to simulate environment and collect
@@ -66,6 +67,9 @@ def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, determin
     if num_steps == None:
         num_steps = rollouts.num_steps
 
+    data = {}
+    rollout_info = []
+
     for step in range(num_steps):
         #Generate rollouts for num_steps batch
         with torch.no_grad():
@@ -83,11 +87,17 @@ def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, determin
         masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
         bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
         
+        
+        if data_callback is not None:
+            data = data_callback(model, envs, recurrent_hidden_states, obs, action, 
+                                 reward, done, data)
+        
         auxiliary_truths = []
         for info in infos:
             if 'auxiliary' in info:
                 if len(info['auxiliary'] > 0):
                     auxiliary_truths.append(info['auxiliary'])
+        rollout_info.append(infos)
         if len(auxiliary_truths) > 0:
             auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
         else:
@@ -95,6 +105,8 @@ def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, determin
 
         rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks,
                         auxiliary_preds, auxiliary_truths)
+        
+    return data, rollout_info
         
         
         
@@ -163,13 +175,13 @@ def update_model(agent, rollouts, use_gae=False, gamma=0.99, gae_lambda=0.95,
 
 
 def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_kwargs={}, make_env=True,
-                            nn_base='FlexBase', agent_base='LoudPPO', nn_base_kwargs={}, recurrent=True,
+                            agent_base='LoudPPO', nn_base_kwargs={}, recurrent=True,
                             num_steps=10, num_processes=1, seed=0, ppo_epoch=4, clip_param=0.5,
                             num_mini_batch=1, value_loss_coef=0.5, entropy_coef=0.01, 
                             auxiliary_loss_coef=0.3, gamma=0.99, lr=7e-4, eps=1e-5, max_grad_norm=0.5,
                             log_dir='/tmp/gym/', device=torch.device('cpu'), 
                             capture_video=False, take_optimizer_step=True,
-                            normalize=True):
+                            normalize=True, obs=None, aux_wrapper_kwargs={}, new_aux=True):
     """Generate training objects, specifically setting up everything to generate gradients
         Important parameters:
             model, obs_rms, env_kwargs, num_steps (batch_size), num_processes, seed, 
@@ -210,6 +222,7 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
             step. Defaults to True.
         normalize (bool, optional): Whether to normalize vectorized environment observations. 
             Defaults to True.
+        obs (torch.Tensor, optional): Need to pass the first observation if not making new environments
 
     Returns:
         agent, envs, rollouts
@@ -222,9 +235,13 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
     env = gym.make('NavEnv-v0', **env_kwargs)
 
     if model is None:
+        if new_aux:
+            nn_base = 'FlexBaseAux'
+        else:
+            nn_base = 'FlexBase'
         model = Policy(env.observation_space.shape,
                        env.action_space,
-                       base='FlexBase',
+                       base=nn_base,
                        base_kwargs={'recurrent': recurrent,
                            **nn_base_kwargs})
         model.to(device)
@@ -243,15 +260,21 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
 
 
     #Initialize storage
-    rollouts = RolloutStorage(num_steps, num_processes, env.observation_space.shape, env.action_space,
-                              model.recurrent_hidden_state_size, model.auxiliary_output_size)
+    if new_aux:
+        rollouts = RolloutStorageAux(num_steps, num_processes, envs.observation_space.shape, envs.action_space,
+                            model.recurrent_hidden_state_size, model.auxiliary_output_sizes,
+                            model.auxiliary_output_sizes)
+    else:
+        rollouts = RolloutStorage(num_steps, num_processes, env.observation_space.shape, env.action_space,
+                                model.recurrent_hidden_state_size, model.auxiliary_output_size)
     #Storage objects initializes a bunch of empty tensors to store information, e.g.
     #obs has shape (num_steps+1, num_processes, obs_shape)
     #rewards has shape (num_steps, num_processes, 1)
     
     if make_env:
         envs = make_vec_envs(env_name, seed, num_processes, gamma, log_dir, device, False,
-                            capture_video=capture_video, env_kwargs=env_kwargs, normalize=normalize)
+                            capture_video=capture_video, env_kwargs=env_kwargs, normalize=normalize,
+                            **aux_wrapper_kwargs)
     else:
         envs = None
     #If loading a previously trained model, pass an obs_rms object to set the vec envs to use
@@ -264,7 +287,10 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
         
     #obs, recurrent_hidden_states, value_preds, returns all have batch size num_steps+1
     #rewards, action_log_probs, actions, masks, auxiliary_preds, auxiliary_truths all have batch size num_steps
-    obs = envs.reset()
+    if make_env:
+        obs = envs.reset()
+    elif obs == None:
+        raise Exception('No obs passed and no env created, storage cannot be initialized')
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
     
@@ -300,8 +326,110 @@ def generate_storage(model, num_steps, num_processes, obs, env=None, env_name='N
 
 
 def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, num_layers=None,
-                             decompose_grads=False):
+                             decompose_grads=False, data_callback=None):
     """Main function to collect batches and grad
+
+    Args:
+        agent (PPO type): Trainer object 
+        envs (VecPyTorch): Collection of vectorized envs
+        rollouts (RolloutStorage): Storage object 
+        num_batches (int, optional): How many batches to collect. Defaults to 1.
+        seed (int, optional): Randomizing seed. Defaults to None.
+        num_layers (int, optional): How many sets of parameters to collect. If not
+        given, collect all. Defaults to None.
+        decompose_grads (bool, optional): Whether to separate out loss grads (actor,
+        value, entropy, auxiliary). agent must be a DecomposeGradPPO object to use this. 
+        Defaults to False.
+
+    Returns:
+        dict: results
+            all_grads: gradients indexed by all_grads[param_set][batch] (Tensor)
+                If decompose_grads==True, this a dict indexed by
+                all_grads[grad_type][param_set][batch]
+            rewarded: whether each batch had reward or not rewarded[batch]
+            value_losses: losses for values value_losses[batch]
+            action_losses: losses for actions action_losses[batch]
+            rewards: total rewards in each batch rewrds[batch]
+            value_diff: total sum difference between true and expected values value_diff[batch]
+    """
+    rewarded = []
+    value_losses = []
+    action_losses = []
+    auxiliary_losses = []
+    num_rewards = []
+    value_diffs = []
+    datas = []
+    infos = []
+
+    params = list(agent.actor_critic.parameters())
+    if num_layers == None:
+        num_layers = len(list(params))
+
+    if decompose_grads:
+        grad_types = ['value', 'action', 'auxiliary', 'entropy']
+        all_grads = {name: [] for name in grad_types}
+        for name in grad_types:
+            for i in range(num_layers):
+                all_grads[name].append([])
+    else:
+        all_grads = []
+        for i in range(num_layers):
+            all_grads.append([])
+        
+    
+    for n in range(num_batches):
+        data, info = populate_rollouts(agent.actor_critic, envs, rollouts, rollouts.num_steps, seed=seed,
+                                 data_callback=data_callback)
+        
+        agent.optimizer.zero_grad()
+        next_value = agent.actor_critic.get_value(rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                                     rollouts.masks[-1]).detach()
+        rollouts.compute_returns(next_value, False, 0.99, 0.95)
+        
+        
+        if decompose_grads:
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                grads = agent.update(rollouts)
+            
+            for name in grad_types:
+                for i in range(num_layers):
+                    all_grads[name][i].append(grads[name][i])
+        else:
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
+
+            for i in range(num_layers):
+                all_grads[i].append(params[i].grad.clone())
+            
+        rew = rollouts.rewards
+        rewarded.append((rew != 0).any().item())
+        num_rewards.append(len(rew[rew != 0]))
+        value_losses.append(value_loss)
+        action_losses.append(action_loss)
+        auxiliary_losses.append(auxiliary_loss)
+        datas.append(data)
+        infos.append(info)
+        
+        value_diff = torch.sum(rollouts.returns - rollouts.value_preds)
+        value_diffs.append(value_diff.item())
+        rollouts.after_update()
+    
+    return {
+        'all_grads': all_grads,
+        'rewarded': rewarded,
+        'value_losses': value_losses,
+        'action_losses': action_losses,
+        'auxiliary_losses': auxiliary_losses,
+        'rewards': num_rewards,
+        'value_diff': value_diffs,
+        'data': datas
+    }
+
+
+
+def collect_batches_and_auxrew_grads(agent, envs, rollouts, num_batches=1, seed=None, num_layers=None,
+                             decompose_grads=False, data_callback=None, compute_pure_bonus=False):
+    """Main function to collect batches and grad for a bonus reward auxiliary task. 
+        Assume envs includes some bonus reward
 
     Args:
         agent (PPO type): Trainer object 
@@ -331,31 +459,44 @@ def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, n
     action_losses = []
     num_rewards = []
     value_diffs = []
-
-    params = list(agent.actor_critic.base.parameters())
+    all_rewards_bonus = []
+    all_rewards_goal = []
+    datas = []
+    infos = []
+    
+    params = list(agent.actor_critic.parameters())
     if num_layers == None:
         num_layers = len(list(params))
 
     if decompose_grads:
         grad_types = ['value', 'action', 'auxiliary', 'entropy']
-        all_grads = {name: [] for name in grad_types}
+        all_grads_bonus = {name: [] for name in grad_types}
+        all_grads_goal = {name: [] for name in grad_types}
+        all_grads_pure_bonus = {name: [] for name in grad_types}
         for name in grad_types:
             for i in range(num_layers):
-                all_grads[name].append([])
+                all_grads_bonus[name].append([])
+                all_grads_goal[name].append([])
+                all_grads_pure_bonus[name].append([])
     else:
-        all_grads = []
+        all_grads_bonus = []
+        all_grads_goal = []
+        all_grads_pure_bonus = []
         for i in range(num_layers):
-            all_grads.append([])
+            all_grads_bonus.append([])
+            all_grads_goal.append([])
+            all_grads_pure_bonus.append([])
         
     
     for n in range(num_batches):
-        populate_rollouts(agent.actor_critic, envs, rollouts, rollouts.num_steps, seed=seed)
+        data, info = populate_rollouts(agent.actor_critic, envs, rollouts, rollouts.num_steps, seed=seed,
+                                 data_callback=data_callback)
         
+        #First set of gradient calculations with the original reward
         agent.optimizer.zero_grad()
         next_value = agent.actor_critic.get_value(rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
                                      rollouts.masks[-1]).detach()
         rollouts.compute_returns(next_value, False, 0.99, 0.95)
-        
         
         if decompose_grads:
             value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
@@ -363,30 +504,86 @@ def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, n
             
             for name in grad_types:
                 for i in range(num_layers):
-                    all_grads[name][i].append(grads[name][i])
+                    all_grads_bonus[name][i].append(grads[name][i])
         else:
             value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
 
             for i in range(num_layers):
-                all_grads[i].append(params[i].grad.clone())
+                all_grads_bonus[i].append(params[i].grad.clone())
+                
+        #Second set of gradient calculations removing any bonus rewards smaller than 1
+        rew_goal = rollouts.rewards.clone()
+        rew_pure_bonus = rollouts.rewards.clone()
+        
+        all_rewards_bonus.append(rew_goal.clone())
+        rew_goal[rew_goal < 1.0] -= rew_goal[rew_goal < 1.0]
+        rollouts.rewards.copy_(rew_goal)
+        
+        agent.optimizer.zero_grad()
+        next_value = agent.actor_critic.get_value(rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                                     rollouts.masks[-1]).detach()
+        rollouts.compute_returns(next_value, False, 0.99, 0.95)
+        if decompose_grads:
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                grads = agent.update(rollouts)
             
-        rew = rollouts.rewards
+            for name in grad_types:
+                for i in range(num_layers):
+                    all_grads_bonus[name][i].append(grads[name][i])
+        else:
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
+
+            for i in range(num_layers):
+                all_grads_goal[i].append(params[i].grad.clone())
+                
+        #Third set of gradient calculations removing the goal alone
+        if compute_pure_bonus:
+            rew_pure_bonus[rew_pure_bonus >= 1.0] -= rew_pure_bonus[rew_pure_bonus >= 1.0]
+            rollouts.rewards.copy_(rew_pure_bonus)
+            
+            agent.optimizer.zero_grad()
+            next_value = agent.actor_critic.get_value(rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                                        rollouts.masks[-1]).detach()
+            rollouts.compute_returns(next_value, False, 0.99, 0.95)
+            if decompose_grads:
+                value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                    grads = agent.update(rollouts)
+                
+                for name in grad_types:
+                    for i in range(num_layers):
+                        all_grads_bonus[name][i].append(grads[name][i])
+            else:
+                value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
+
+                for i in range(num_layers):
+                    all_grads_pure_bonus[i].append(params[i].grad.clone())
+            
+        rew = rollouts.rewards.clone()
+        all_rewards_goal.append(rew)
         rewarded.append((rew != 0).any().item())
         num_rewards.append(len(rew[rew != 0]))
         value_losses.append(value_loss)
         action_losses.append(action_loss)
+        datas.append(data)
+        infos.append(info)
         
         value_diff = torch.sum(rollouts.returns - rollouts.value_preds)
         value_diffs.append(value_diff.item())
         rollouts.after_update()
     
     return {
-        'all_grads': all_grads,
+        'all_grads_bonus': all_grads_bonus,
+        'all_grads_goal': all_grads_goal,
+        'all_grads_pure_bonus': all_grads_pure_bonus,
+        'all_rewards_goal': all_rewards_goal,
+        'all_rewards_bonus': all_rewards_bonus,
         'rewarded': rewarded,
         'value_losses': value_losses,
         'action_losses': action_losses,
         'rewards': num_rewards,
-        'value_diff': value_diffs
+        'value_diff': value_diffs,
+        'data': datas,
+        'info': infos
     }
 
 
@@ -509,7 +706,7 @@ def aux_cos_sims_from_all_grads(all_grads, use_layer_subset=True, actor_layer_su
             
             
 def aux_cos_sim_grad(grads, use_layer_subset='a', pairwise=False):
-    """Compare aux vs rl grads for a single agent between batches
+    """Compare pred aux grads vs rl grads for a single agent between batches
 
     Args:
         grads (all_grads): all_grads indexed by all_grads[type][layer][batch]
@@ -525,6 +722,8 @@ def aux_cos_sim_grad(grads, use_layer_subset='a', pairwise=False):
         layers = [0, 1, 6, 10]
     elif use_layer_subset == 'c':
         layers = [0, 1, 4, 8]
+    elif type(use_layer_subset) == list:
+        layers = use_layer_subset
     elif use_layer_subset == None or use_layer_subset == False:
         layers = range(len(grads['action']))
 
@@ -580,11 +779,7 @@ def cos_sim_grad(grads1, grads2, use_layer_subset=None, pairwise=True,
     Returns:
         cos_sims (list): cosine similarities
     """
-    if use_layer_subset == 'a':
-        layers = [0, 1, 6, 10]
-    elif use_layer_subset == 'c':
-        layers = [0, 1, 4, 8]
-    elif use_layer_subset == None or use_layer_subset == False:
+    if use_layer_subset == None or use_layer_subset == False:
         if decompose_grads:
             layers1 = len(grads1['action'])
             layers2 = len(grads2['action'])
@@ -593,8 +788,15 @@ def cos_sim_grad(grads1, grads2, use_layer_subset=None, pairwise=True,
             layers1 = len(grads1)
             layers2 = len(grads2)
             layers = range(min(layers1, layers2))
+    else:
+        if type(use_layer_subset) == str:
+            if use_layer_subset == 'a':
+                layers = [0, 1, 6, 10]
+            elif use_layer_subset == 'c':
+                layers = [0, 1, 4, 8]
+        elif type(use_layer_subset) == list:            
+            layers = use_layer_subset
             
-        
     cos_sims = []
     # print(layers)
     for i in layers:

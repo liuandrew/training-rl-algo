@@ -16,13 +16,16 @@ If running this file directly from command line, will iterate through experiment
     config files and run the experiments
 '''
 
-def convert_config_to_command(file, python3=False, cont=False,
+def convert_config_to_command(file=None, config=None, python3=False, cont=False,
                               config_folder=CONFIG_FOLDER):
     '''
     when passed a file name in experiment_configs, load the config and turn it into
     a command line line to run the experiment
     '''
-    config = pickle.load(open(config_folder + file, 'rb'))
+    if file != None:
+        config = pickle.load(open(config_folder + file, 'rb'))
+    if config == None:
+        raise ValueError('No file or config given')
     if python3:
         run_string = 'python3 main.py '
     else:
@@ -36,12 +39,15 @@ def convert_config_to_command(file, python3=False, cont=False,
             for key2 in config[key]:
                 add_str += key2 + '=' + str(config[key][key2]).replace(' ', '') + ' '
             run_string = run_string + add_str
+        elif type(config[key]) == list:
+            run_string = run_string + '--' + key.replace('_', '-') + ' ' + str(config[key]).replace(' ', '') + ' '
         else:
             run_string = run_string + '--' + key.replace('_', '-')  + ' ' + str(config[key]) + ' '
     if cont:
         run_string = run_string + '--cont '
     #additionally add file name flag
-    run_string = run_string + '--config-file-name ' + file + ' '
+    if file != None:
+        run_string = run_string + '--config-file-name ' + file + ' '
     # print(run_string)
     return run_string
 

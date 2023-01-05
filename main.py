@@ -15,11 +15,12 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 from a2c_ppo_acktr import algo, utils
+from a2c_ppo_acktr.algo.ppo import PPOAux
 from a2c_ppo_acktr.algo import gail
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
-from a2c_ppo_acktr.storage import RolloutStorage
+from a2c_ppo_acktr.storage import RolloutStorage, RolloutStorageAux
 from evaluation import evaluate
 
 from scheduler import write_latest_exp_complete
@@ -122,6 +123,16 @@ def main():
     eval_log_dir = log_dir + "_eval"
     utils.cleanup_log_dir(log_dir)
     utils.cleanup_log_dir(eval_log_dir)
+    
+    #Perform some checks for new auxiliary task trainers
+    if args.use_new_aux == True:
+        print('New Auxiliary training methods')
+        print('auxiliary truth sizes: ' + str(args.auxiliary_truth_sizes))
+        print('auxiliary heads: ' + str(args.nn_base_kwargs['auxiliary_heads']))
+        if len(args.auxiliary_truth_sizes) != len(args.nn_base_kwargs['auxiliary_heads']):
+            raise Exception('number of auxiliary_truth_sizes should be equivalent to number of auxiliary heads')
+        if args.nn_base != 'FlexBaseAux':
+            print('WARNING: nn_base should probably be FlexBaseAux for new aux methods')
 
     # Andy: generate save path ahead of time
     if args.save_subdir is not None:
@@ -224,17 +235,30 @@ def main():
             alpha=args.alpha,
             max_grad_norm=args.max_grad_norm)
     elif args.algo == 'ppo':
-        agent = algo.PPO(
-            actor_critic,
-            args.clip_param,
-            args.ppo_epoch,
-            args.num_mini_batch,
-            args.value_loss_coef,
-            args.entropy_coef,
-            args.auxiliary_loss_coef,
-            lr=args.lr,
-            eps=args.eps,
-            max_grad_norm=args.max_grad_norm)
+        if args.use_new_aux:
+            agent = PPOAux(
+                actor_critic,
+                args.clip_param,
+                args.ppo_epoch,
+                args.num_mini_batch,
+                args.value_loss_coef,
+                args.entropy_coef,
+                args.auxiliary_loss_coef,
+                lr=args.lr,
+                eps=args.eps,
+                max_grad_norm=args.max_grad_norm)   
+        else:
+            agent = algo.PPO(
+                actor_critic,
+                args.clip_param,
+                args.ppo_epoch,
+                args.num_mini_batch,
+                args.value_loss_coef,
+                args.entropy_coef,
+                args.auxiliary_loss_coef,
+                lr=args.lr,
+                eps=args.eps,
+                max_grad_norm=args.max_grad_norm)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(
             actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)
@@ -258,10 +282,17 @@ def main():
             drop_last=drop_last)
 
     print('initializing storage')
-    rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                              envs.observation_space.shape, envs.action_space,
-                              actor_critic.recurrent_hidden_state_size,
-                              actor_critic.auxiliary_output_size)
+    if args.use_new_aux:
+        rollouts = RolloutStorageAux(args.num_steps, args.num_processes,
+                                envs.observation_space.shape, envs.action_space,
+                                actor_critic.recurrent_hidden_state_size,
+                                actor_critic.auxiliary_output_sizes, #note sizes not size here
+                                auxiliary_truth_sizes=args.auxiliary_truth_sizes)
+    else:
+        rollouts = RolloutStorage(args.num_steps, args.num_processes,
+                                envs.observation_space.shape, envs.action_space,
+                                actor_critic.recurrent_hidden_state_size,
+                                actor_critic.auxiliary_output_size)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -311,25 +342,41 @@ def main():
             # Obser reward and next obs
             # obs, reward, done, infos = envs.step(action)
             obs, reward, done, infos = envs.step(action)
-            auxiliary_truths = []
-            for info in infos:
-                if 'auxiliary' in info:
-                    if len(info['auxiliary'] > 0):
-                        auxiliary_truths.append(info['auxiliary'])
-            if len(auxiliary_truths) > 0:
-                auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
-            else:
-                auxiliary_truths = None
+            
+            if args.use_new_aux:
+                # !! New auxiliary code separating out auxiliary tasks into list
+                # Note that we will have an error "list index out of range" if 
+                #  there is a mismatch between number of truths and preds
+                auxiliary_truths = [[] for i in range(len(actor_critic.auxiliary_output_sizes))]
+                for info in infos:
+                    if 'auxiliary' in info and len(info['auxiliary']) > 0:
+                        for i, aux in enumerate(info['auxiliary']):
+                            auxiliary_truths[i].append(aux)
+                if len(auxiliary_truths) > 0:
+                    auxiliary_truths = [torch.tensor(np.vstack(aux)) for aux in auxiliary_truths]
 
-            for info in infos:
-                if 'episode' in info.keys():
-                    episode_rewards.append(info['episode']['r'])
-                    print(f'global_step={global_step}')
-                    # Andy: add tensorboard writing episode returns
-                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], 
-                        global_step)
-                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], 
-                        global_step)
+                for info in infos:
+                    if 'episode' in info.keys():
+                        episode_rewards.append(info['episode']['r'])
+                        print(f'global_step={global_step}')
+                        # Andy: add tensorboard writing episode returns
+                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], 
+                            global_step)
+                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], 
+                            global_step)
+            else:
+                # !! Old auxiliary code needed to run old training model
+                auxiliary_truths = []
+                for info in infos:
+                    if 'auxiliary' in info:
+                        if len(info['auxiliary'] > 0):
+                            auxiliary_truths.append(info['auxiliary'])
+                if len(auxiliary_truths) > 0:
+                    auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
+                else:
+                    auxiliary_truths = None
+            
+
 
 
             # If done then clean the history of observations.

@@ -7,7 +7,8 @@ from a2c_ppo_acktr.envs import make_vec_envs
 
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
              device, ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
-             num_episodes=10, verbose=0, with_activations=False, deterministic=True):
+             num_episodes=10, verbose=0, with_activations=False, deterministic=True,
+             normalize=True, aux_wrapper_kwargs={}):
     '''
     ret_info: level of info that should be tracked and returned
     capture_video: whether video should be captured for episodes
@@ -32,7 +33,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes,
                               None, eval_log_dir, device, True, 
                               capture_video=capture_video, 
-                              env_kwargs=env_kwargs)
+                              env_kwargs=env_kwargs, normalize=normalize,
+                              **aux_wrapper_kwargs)
 
     vec_norm = utils.get_vec_normalize(eval_envs)
     if vec_norm is not None:
@@ -50,6 +52,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
     all_activations = []
     all_values = []
     all_actor_features = []
+    all_auxiliary_preds = []
+    all_auxiliary_truths = []
     data = {}
 
     obs = eval_envs.reset()
@@ -88,6 +92,10 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         all_values.append(outputs['value'])
         all_actor_features.append(outputs['actor_features'])
         
+        if 'auxiliary_preds' in outputs:
+            all_auxiliary_preds.append(outputs['auxiliary_preds'])
+        
+        
         if with_activations:
             all_activations.append(outputs['activations'])
 
@@ -97,6 +105,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         else:
             data = {}
 
+        auxiliary_truths = []
         for info in infos:
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
@@ -104,6 +113,18 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
                 if verbose >= 2:
                     print('ep ' + str(len(eval_episode_rewards)) + ' rew ' + \
                         str(info['episode']['r']))
+                    
+            if 'auxiliary' in info:
+                    if len(info['auxiliary'] > 0):
+                        auxiliary_truths.append(info['auxiliary'])
+                        
+        if len(auxiliary_truths) > 0:
+            auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
+        else:
+            auxiliary_truths = None
+        
+        all_auxiliary_truths.append(auxiliary_truths)
+
 
     # eval_envs.close()
     if verbose >= 1:
@@ -122,6 +143,8 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
         'activations': all_activations,
         'values': all_values,
         'actor_features': all_actor_features,
+        'auxiliary_preds': all_auxiliary_preds,
+        'auxiliary_truths': all_auxiliary_truths,
     }
 
 

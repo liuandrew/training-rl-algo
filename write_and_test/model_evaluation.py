@@ -183,12 +183,14 @@ def load_model_and_env(experiment, trial_num=None, env_name=None,
         return model, obs_rms, env_kwargs
 
 
-def load_checkpoint(experiment, checkpoint=None, base_folder='../trained_models/checkpoint'):
+def load_checkpoint(experiment, trial=None, checkpoint=None, base_folder='../trained_models/checkpoint'):
     '''
     Load a saved model checkpoint, and if no checkpoint is given,
     print out possible checkpoint options
     '''
     folder = Path(base_folder)
+    if trial != None:
+        experiment = experiment + f'_t{trial}'
     path = folder/experiment
     
     checkpoints = [f.name.split('.pt')[0] for f in path.iterdir() if '.pt' in f.name]
@@ -210,7 +212,7 @@ def load_checkpoint(experiment, checkpoint=None, base_folder='../trained_models/
 
 def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
           data_callback=None, capture_video=False, verbose=0, with_activations=False,
-          seed=1, deterministic=True):
+          seed=1, deterministic=True, normalize=True, aux_wrapper_kwargs={}):
     '''
     Evaluate using the current global model, obs_rms, and env_kwargs
     Load ep_ends, ep_lens into global vars to be used by get_ep
@@ -225,7 +227,8 @@ def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
     
     results = evaluate(model, obs_rms, env_name, seed, 1, eval_log_dir, device, 
          env_kwargs=env_kwargs, data_callback=data_callback, num_episodes=n, capture_video=capture_video,
-         verbose=verbose, with_activations=with_activations, deterministic=deterministic)
+         verbose=verbose, with_activations=with_activations, deterministic=deterministic,
+         normalize=normalize, aux_wrapper_kwargs=aux_wrapper_kwargs)
 
     #ep_ends and ep_lens used to easily pull data for single episodes
     results['ep_ends'] = np.where(np.array(results['dones']).flatten())[0]
@@ -468,20 +471,31 @@ def animate_episode(ep_num=0, trajectory=False):
 
     
     
+# def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
+#                                   obs, action, reward, done, data):
+#     if data == {}:
+#         data['pos'] = []
+#         data['angle'] = []
+    
+#     pos = vec_envs.get_attr('character')[0].pos.copy()
+#     angle = vec_envs.get_attr('character')[0].angle
+#     data['pos'].append(pos)
+#     data['angle'].append(angle)
+    
+#     return data
+
 def nav_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
                                   obs, action, reward, done, data):
     if data == {}:
         data['pos'] = []
         data['angle'] = []
     
-    pos = vec_envs.get_attr('character')[0].pos.copy()
-    angle = vec_envs.get_attr('character')[0].angle
+    pos = [c.pos.copy() for c in vec_envs.get_attr('character')]
+    angle = [c.angle for c in vec_envs.get_attr('character')]
     data['pos'].append(pos)
     data['angle'].append(angle)
     
     return data
-
-
         
 def poster_data_callback(actor_critic, vec_envs, recurrent_hidden_states,
                                   obs, action, reward, done, data):

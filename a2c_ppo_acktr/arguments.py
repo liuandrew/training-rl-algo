@@ -38,6 +38,19 @@ class ParseKwargs(argparse.Action):
 
             getattr(namespace, self.dest)[key] = value
             
+class ParseList(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, list())
+        print(values)
+        # for value in values:
+        #     if '[' in value:
+        #         value = literal_eval(value)
+        #         getattr(namespace, self.dest).append(value)
+        for value in values:
+            if '[' in value:
+                value = literal_eval(value)
+            setattr(namespace, self.dest, value)
+            
             
 def strtobool(v):
     if isinstance(v, bool):
@@ -251,6 +264,11 @@ def get_args():
     #   so that we can use a different weighting per task
     parser.add_argument('--auxiliary-loss-coef', type=float, default=0.3,
         help='auxiliary loss coefficient (default: 0.3)')
+    #Andy: add flag to use new auxiliary training methods that split each aux task into individually computed
+    #losses so that we can specify different truth sizes and loss functions
+    parser.add_argument('--use-new-aux', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='if toggled, use new auxiliary training algorithms PPOAux, RolloutStorageAux')
+    parser.add_argument('--auxiliary-truth-sizes', nargs='*', action=ParseList, default=[])
     
     #Andy: add new experiment type - load and freeze parameters set from  an existing model
     parser.add_argument('--clone-parameter-experiment', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,

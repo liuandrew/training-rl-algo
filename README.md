@@ -21,6 +21,10 @@ In each of the files, you can search "Andy:" for places where the original code 
 * evaluate.py: adding code to return all seen obs and actions during evaluation, as well as hidden states so that we could potentitally map out hidden state trajectories. Adding code to take an optional callback to gather additional data from environment, and option to select how many episodes
   * added ability to use to record video and verbosity for printing individual episode results
 
+### Second Auxiliary Task Training Methods
+
+
+
 ### Research Work
 
 In the write_and_test folder, I am working on code to either set up experiments, make plots, or test code. These are mostly handled in Jupyter notebooks

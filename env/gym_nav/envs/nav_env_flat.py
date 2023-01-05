@@ -324,7 +324,8 @@ class NavEnvFlat(gym.Env):
                 task_structure=1, poster=False, auxiliary_tasks=[],
                 auxiliary_task_args=[], fixed_reset=[None, None],
                 character_reset_pos=0, turn_speed=0.2, move_speed=10,
-                num_actions=4, num_grid_slices=5, goal_size=20, goal_corner=None):
+                num_actions=4, num_grid_slices=5, goal_size=20, goal_corner=None,
+                separate_aux_tasks=False):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -479,6 +480,7 @@ class NavEnvFlat(gym.Env):
                     task, ', '.join(available_auxiliary_tasks.keys())))
             else:
                 self.auxiliary_tasks.append(auxiliary_task_to_idx[task])
+        self.separate_aux_tasks = separate_aux_tasks
         
         # self.auxiliary_tasks = [auxiliary_task_to_idx[task] for task in auxiliary_tasks]
         # print('auxiliary tasks', self.auxiliary_tasks)
@@ -509,7 +511,8 @@ class NavEnvFlat(gym.Env):
             goal = self.boxes[-1]
             dist_to_goal = self.sub_goal_reward * \
                 (MAX_LEN-dist(goal.center - self.character.pos)) / MAX_LEN
-            reward = float(dist_to_goal)
+            reward += float(dist_to_goal)
+            info['bonus_reward'] = float(dist_to_goal)
         elif self.rew_structure == 'explore': 
             x_grids = np.linspace(0, WINDOW_SIZE[0], self.num_grid_slices+1)
             y_grids = np.linspace(0, WINDOW_SIZE[1], self.num_grid_slices+1)
@@ -529,6 +532,11 @@ class NavEnvFlat(gym.Env):
             if self.visited_sections[x_grid, y_grid] == 0:
                 self.visited_sections[x_grid, y_grid] = 1
                 reward += self.sub_goal_reward
+                info['bonus_reward'] = self.sub_goal_reward
+            else:
+                info['bonus_reward'] = 0
+            
+            
 
             
         if collision_obj != None:
@@ -722,13 +730,11 @@ class NavEnvFlat(gym.Env):
             #0: null task - predict 0
             if task == 0:
                 output = [0]
-                auxiliary_output += output
             #1: euclidean distance from start task (normalized)
             if task == 1:
                 euclid_dist_start = dist(self.character.pos - self.initial_character_position)
                 euclid_dist_start = euclid_dist_start / MAX_LEN
                 output = [euclid_dist_start]
-                auxiliary_output += output
             #2: relative angle from wall, depending on arg passed
                 # give int from 1 to 4, 1 is east and 4 is south
             if task == 2:
@@ -749,7 +755,6 @@ class NavEnvFlat(gym.Env):
                                         abs(wall_angle + 2*np.pi - char_2pi_angle)])
                 min_rel_angle = min_rel_angle / np.pi
                 output = [min_rel_angle]
-                auxiliary_output += output
             #3: distance between agent and goal
             if task == 3:
                 goal_pos = self.boxes[-1].center
@@ -758,10 +763,16 @@ class NavEnvFlat(gym.Env):
                 #normalize distance to [0, 1]
                 goal_dist = goal_dist / MAX_LEN
                 output = [goal_dist]
+            
+            if self.separate_aux_tasks:
+                auxiliary_output.append(output)
+            else:
                 auxiliary_output += output
-                
-                
-        return np.array(auxiliary_output)
+        
+        if self.separate_aux_tasks:
+            return auxiliary_output
+        else:
+            return np.array(auxiliary_output)
     
         
 

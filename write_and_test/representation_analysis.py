@@ -26,6 +26,18 @@ ys_grid = np.linspace(0, WINDOW_SIZE[1], num_grid_slices, endpoint=False)
 softmax = nn.Softmax(dim=1)
 
 
+def color_cycle(cycle='default', idx=None):
+    # Colors to assign to auxiliary tasks (they will be assigned in order)
+    colors = pplt.Cycle(cycle).by_key()['color']
+    hex_to_rgb = lambda h: tuple(int(h.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    rgb_colors = np.array([hex_to_rgb(color) for color in colors])/255
+    
+    if idx is not None:
+        return rgb_colors[idx]
+    else:
+        return rgb_colors
+
+
 def activation_testing(model, env, x, y, angle):
     """
     Pass a model and corresponding environment, x, y and angle, then 
