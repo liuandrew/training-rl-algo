@@ -736,7 +736,7 @@ class NavEnvFlat(gym.Env):
                 euclid_dist_start = euclid_dist_start / MAX_LEN
                 output = [euclid_dist_start]
             #2: relative angle from wall, depending on arg passed
-                # give int from 1 to 4, 1 is east and 4 is south
+                # give int from 0 to 3, 0 is east and 3 is south
             if task == 2:
                 if aux_arg == None:
                     wall = 0
@@ -763,12 +763,60 @@ class NavEnvFlat(gym.Env):
                 #normalize distance to [0, 1]
                 goal_dist = goal_dist / MAX_LEN
                 output = [goal_dist]
-            
+            #4-6 categorical auxiliary tasks
+            #4: currently faced wall - output label 0-3 for currently faced wall
+            if task == 4:
+                #conversion of angle to be between 0 and 2pi, then check quadrant of angle faced
+                char_2pi_angle = (self.character.angle + 2 * np.pi) % (2 * np.pi)
+                if char_2pi_angle < (np.pi/2):
+                    quadrant = 0
+                elif char_2pi_angle < (np.pi):
+                    quadrant = 1
+                elif char_2pi_angle < (np.pi*3/2):
+                    quadrant = 2
+                else:
+                    quadrant = 3
+                output = [quadrant]
+            #5: left/right turn to face wall
+            #  give int from 0 to 3 where 0 is east and 3 is south, agent
+            #  must output 0 if a left turn or 1 if a right turn is faster to face that wall
+            #  categorical analog to task 2
+            if task == 5:
+                if aux_arg == None:
+                    wall = 0
+                else:
+                    wall = aux_arg
+                if wall < 0 or wall > 3:
+                    raise Exception('Invalid wall number passed for relative wall direction auxiliary' + \
+                        'task. Must use an integer between 0 and 3, or None (defaults to 0)')
+                
+                if wall > 2:
+                    wall = wall - 4
+                wall_angle = (wall * 0.5) * np.pi
+                char_2pi_angle = (self.character.angle + 2 * np.pi) % (2 * np.pi)
+                
+                left_angle = wall_angle - char_2pi_angle
+                if left_angle < 0:
+                    left_angle = 2*np.pi + left_angle
+                right_angle = 2*np.pi - left_angle
+                if left_angle > right_angle:
+                    direction = 0
+                else:
+                    direction = 1
+                output = [direction]
+            #6: current quadrant location - output label 0-3 for current quadrant
+            if task == 6:
+                quadrant = 0
+                char_pos = self.character.pos
+                if char_pos[0] > WINDOW_SIZE[0]/2:
+                    quadrant += 1
+                if char_pos[1] > WINDOW_SIZE[1]/2:
+                    quadrant += 2
+                output = [quadrant]                
             if self.separate_aux_tasks:
                 auxiliary_output.append(output)
             else:
                 auxiliary_output += output
-        
         if self.separate_aux_tasks:
             return auxiliary_output
         else:

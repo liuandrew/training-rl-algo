@@ -95,7 +95,7 @@ def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, determin
         auxiliary_truths = []
         for info in infos:
             if 'auxiliary' in info:
-                if len(info['auxiliary'] > 0):
+                if len(info['auxiliary']) > 0:
                     auxiliary_truths.append(info['auxiliary'])
         rollout_info.append(infos)
         if len(auxiliary_truths) > 0:
@@ -181,7 +181,8 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
                             auxiliary_loss_coef=0.3, gamma=0.99, lr=7e-4, eps=1e-5, max_grad_norm=0.5,
                             log_dir='/tmp/gym/', device=torch.device('cpu'), 
                             capture_video=False, take_optimizer_step=True,
-                            normalize=True, obs=None, aux_wrapper_kwargs={}, new_aux=True):
+                            normalize=True, obs=None, aux_wrapper_kwargs={}, new_aux=True,
+                            auxiliary_truth_sizes=[]):
     """Generate training objects, specifically setting up everything to generate gradients
         Important parameters:
             model, obs_rms, env_kwargs, num_steps (batch_size), num_processes, seed, 
@@ -231,7 +232,13 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
     #Initialize vectorized environments
     # envs = make_vec_envs(env_name, seed, num_processes, gamma, log_dir, device, False,
     #                      capture_video=capture_video, env_kwargs=env_kwargs)
-    
+    if make_env:
+        envs = make_vec_envs(env_name, seed, num_processes, gamma, log_dir, device, False,
+                            capture_video=capture_video, env_kwargs=env_kwargs, normalize=normalize,
+                            **aux_wrapper_kwargs)
+    else:
+        envs = None
+
     env = gym.make('NavEnv-v0', **env_kwargs)
 
     if model is None:
@@ -249,11 +256,16 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
     #Wrap model with an agent algorithm object
     # agent = algo.PPO(model, clip_param, ppo_epoch, num_mini_batch,
     try:
-        base = globals()[agent_base]
-        agent = base(model, clip_param, ppo_epoch, num_mini_batch,
-                        value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
-                        eps=eps, max_grad_norm=max_grad_norm,
-                        take_optimizer_step=take_optimizer_step)
+        if new_aux:
+            agent = PPOAux(model, clip_param, ppo_epoch, num_mini_batch,
+                    value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
+                    eps=eps, max_grad_norm=max_grad_norm)
+        else:
+            base = globals()[agent_base]
+            agent = base(model, clip_param, ppo_epoch, num_mini_batch,
+                            value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
+                            eps=eps, max_grad_norm=max_grad_norm,
+                            take_optimizer_step=take_optimizer_step)
     except:
         print('Model type not found')
         return False
@@ -263,7 +275,7 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
     if new_aux:
         rollouts = RolloutStorageAux(num_steps, num_processes, envs.observation_space.shape, envs.action_space,
                             model.recurrent_hidden_state_size, model.auxiliary_output_sizes,
-                            model.auxiliary_output_sizes)
+                            auxiliary_truth_sizes)
     else:
         rollouts = RolloutStorage(num_steps, num_processes, env.observation_space.shape, env.action_space,
                                 model.recurrent_hidden_state_size, model.auxiliary_output_size)
@@ -271,12 +283,7 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
     #obs has shape (num_steps+1, num_processes, obs_shape)
     #rewards has shape (num_steps, num_processes, 1)
     
-    if make_env:
-        envs = make_vec_envs(env_name, seed, num_processes, gamma, log_dir, device, False,
-                            capture_video=capture_video, env_kwargs=env_kwargs, normalize=normalize,
-                            **aux_wrapper_kwargs)
-    else:
-        envs = None
+
     #If loading a previously trained model, pass an obs_rms object to set the vec envs to use
     
     if normalize and obs_rms != None:

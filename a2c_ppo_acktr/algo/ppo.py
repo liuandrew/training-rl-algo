@@ -218,7 +218,7 @@ class PPOAux():
                             auxiliary_losses[i] += 0.5 * (auxiliary_truth_batch[i] - auxiliary_preds[i]).pow(2).mean()
                         elif aux_type == 1:
                             # auxiliary_loss += self.cross_entropy_loss(auxiliary_preds[i], auxiliary_truth_batch[i])
-                            auxiliary_losses[i] += self.cross_entropy_loss(auxiliary_preds[i], auxiliary_truth_batch[i])
+                            auxiliary_losses[i] += self.cross_entropy_loss(auxiliary_preds[i], auxiliary_truth_batch[i].long().squeeze())
                     auxiliary_loss = auxiliary_losses.sum()
                 else:
                     auxiliary_loss = torch.zeros(1)
