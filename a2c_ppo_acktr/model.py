@@ -77,7 +77,7 @@ class Policy(nn.Module):
         if self.base.has_auxiliary:
             return self.base.auxiliary_output_sizes
         else:
-            return 0
+            return []
     
     
 
@@ -98,7 +98,7 @@ class Policy(nn.Module):
             actor_features = outputs['actor_features']
             rnn_hxs = outputs['rnn_hxs']
             if not self.base.has_auxiliary:
-                outputs['auxiliary_preds'] = torch.zeros(value.shape)
+                outputs['auxiliary_preds'] = None
 
         
         else:
@@ -109,7 +109,7 @@ class Policy(nn.Module):
                 'value': value,
                 'actor_features': actor_features,
                 'rnn_hxs': rnn_hxs,
-                'auxiliary_preds': torch.zeros(value.shape)
+                'auxiliary_preds': None
             }
 
         dist = self.dist(actor_features)
