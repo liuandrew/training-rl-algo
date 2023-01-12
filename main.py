@@ -355,15 +355,6 @@ def main():
                 if len(auxiliary_truths) > 0:
                     auxiliary_truths = [torch.tensor(np.vstack(aux)) for aux in auxiliary_truths]
 
-                for info in infos:
-                    if 'episode' in info.keys():
-                        episode_rewards.append(info['episode']['r'])
-                        print(f'global_step={global_step}')
-                        # Andy: add tensorboard writing episode returns
-                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], 
-                            global_step)
-                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], 
-                            global_step)
             else:
                 # !! Old auxiliary code needed to run old training model
                 auxiliary_truths = []
@@ -376,6 +367,15 @@ def main():
                 else:
                     auxiliary_truths = None
             
+            for info in infos:
+                if 'episode' in info.keys():
+                    episode_rewards.append(info['episode']['r'])
+                    print(f'global_step={global_step}')
+                    # Andy: add tensorboard writing episode returns
+                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], 
+                        global_step)
+                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], 
+                        global_step)
 
 
 
