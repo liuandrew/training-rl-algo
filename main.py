@@ -246,7 +246,8 @@ def main():
                 args.auxiliary_loss_coef,
                 lr=args.lr,
                 eps=args.eps,
-                max_grad_norm=args.max_grad_norm)   
+                max_grad_norm=args.max_grad_norm,
+                remove_actor_grads_on_shared=args.remove_actor_grads_on_shared)   
         else:
             agent = algo.PPO(
                 actor_critic,
@@ -258,7 +259,8 @@ def main():
                 args.auxiliary_loss_coef,
                 lr=args.lr,
                 eps=args.eps,
-                max_grad_norm=args.max_grad_norm)
+                max_grad_norm=args.max_grad_norm,
+                remove_actor_grads_on_shared=args.remove_actor_grads_on_shared)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(
             actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)

@@ -16,7 +16,8 @@ class PPO():
                  lr=None,
                  eps=None,
                  max_grad_norm=None,
-                 use_clipped_value_loss=True):
+                 use_clipped_value_loss=True,
+                 remove_actor_grads_on_shared=False):
 
         self.actor_critic = actor_critic
 
@@ -30,6 +31,11 @@ class PPO():
 
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
+        
+        #Special one time experiment to see whether removing
+        #action and entropy gradients on shared layers influences
+        #performance at all
+        self.remove_actor_grads_on_shared = remove_actor_grads_on_shared
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
 
@@ -95,14 +101,28 @@ class PPO():
                     auxiliary_loss = torch.zeros(1)
                 # print(auxiliary_truth_batch, auxiliary_preds, auxiliary_loss)
 
-
-                self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss + 
-                 auxiliary_loss * self.auxiliary_loss_coef -
-                 dist_entropy * self.entropy_coef).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                         self.max_grad_norm)
-                self.optimizer.step()
+                if self.remove_actor_grads_on_shared:
+                    self.optimizer.zero_grad()
+                    # First get gradient of everything except for value loss
+                    (action_loss + 
+                    auxiliary_loss * self.auxiliary_loss_coef -
+                    dist_entropy * self.entropy_coef).backward(retain_graph=True)
+                    params = list(self.actor_critic.parameters())
+                    # Zero out first 4 param sets, as these are the shared layers
+                    for i in range(4):
+                        params[i].grad = torch.zeros(params[i].shape)
+                    (value_loss * self.value_loss_coef).backward()
+                    nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                                             self.max_grad_norm)
+                    self.optimizer.step()
+                else:
+                    self.optimizer.zero_grad()
+                    (value_loss * self.value_loss_coef + action_loss + 
+                    auxiliary_loss * self.auxiliary_loss_coef -
+                    dist_entropy * self.entropy_coef).backward()
+                    nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                                            self.max_grad_norm)
+                    self.optimizer.step()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
@@ -134,7 +154,8 @@ class PPOAux():
                  lr=None,
                  eps=None,
                  max_grad_norm=None,
-                 use_clipped_value_loss=True):
+                 use_clipped_value_loss=True,
+                 remove_actor_grads_on_shared=False):
 
         self.actor_critic = actor_critic
         self.auxiliary_types = actor_critic.base.auxiliary_layer_types
@@ -150,6 +171,8 @@ class PPOAux():
 
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
+        
+        self.remove_actor_grads_on_shared = remove_actor_grads_on_shared
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
 
@@ -223,13 +246,28 @@ class PPOAux():
                 else:
                     auxiliary_loss = torch.zeros(1)
 
-                self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss + 
-                 auxiliary_loss * self.auxiliary_loss_coef -
-                 dist_entropy * self.entropy_coef).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                         self.max_grad_norm)
-                self.optimizer.step()
+                if self.remove_actor_grads_on_shared:
+                    self.optimizer.zero_grad()
+                    # First get gradient of everything except for value loss
+                    (action_loss + 
+                    auxiliary_loss * self.auxiliary_loss_coef -
+                    dist_entropy * self.entropy_coef).backward(retain_graph=True)
+                    params = list(self.actor_critic.parameters())
+                    # Zero out first 4 param sets, as these are the shared layers
+                    for i in range(4):
+                        params[i].grad = torch.zeros(params[i].shape)
+                    (value_loss * self.value_loss_coef).backward()
+                    nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                                             self.max_grad_norm)
+                    self.optimizer.step()
+                else:
+                    self.optimizer.zero_grad()
+                    (value_loss * self.value_loss_coef + action_loss + 
+                    auxiliary_loss * self.auxiliary_loss_coef -
+                    dist_entropy * self.entropy_coef).backward()
+                    nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                                            self.max_grad_norm)
+                    self.optimizer.step()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()

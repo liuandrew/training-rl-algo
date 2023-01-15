@@ -87,7 +87,6 @@ def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, determin
         masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
         bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
         
-        
         if data_callback is not None:
             data = data_callback(model, envs, recurrent_hidden_states, obs, action, 
                                  reward, done, data)
@@ -105,6 +104,54 @@ def populate_rollouts(model, envs, rollouts, num_steps=None, seed=None, determin
 
         rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks,
                         auxiliary_preds, auxiliary_truths)
+        
+    return data, rollout_info
+
+
+
+def populate_rollouts_aux(model, envs, rollouts, num_steps=None, seed=None, deterministic=False,
+                      data_callback=None):
+    if seed != None:
+        torch.manual_seed(seed)
+        
+    if num_steps == None:
+        num_steps = rollouts.num_steps
+
+    data = {}
+    rollout_info = []
+
+    
+    for step in range(num_steps):
+        #Generate rollouts for num_steps batch
+        with torch.no_grad():
+            outputs = model.act(rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                                rollouts.masks[step])
+            action = outputs['action']
+            value = outputs['value']
+            action_log_prob = outputs['action_log_probs']
+            recurrent_hidden_states = outputs['rnn_hxs']
+            auxiliary_preds = outputs['auxiliary_preds']
+
+        obs, reward, done, infos = envs.step(action)
+        masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
+        bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
+        
+        if data_callback is not None:
+            data = data_callback(model, envs, recurrent_hidden_states, obs, action, 
+                                 reward, done, data)
+        
+        auxiliary_truths = [[] for i in range(len(model.auxiliary_output_sizes))]
+        for info in infos:
+            if 'auxiliary' in info and len(info['auxiliary']) > 0:
+                for i, aux in enumerate(info['auxiliary']):
+                    auxiliary_truths[i].append(aux)
+        if len(auxiliary_truths) > 0:
+            auxiliary_truths = [torch.tensor(np.vstack(aux)) for aux in auxiliary_truths]
+        
+        rollout_info.append(infos)
+        
+        rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks,
+                       auxiliary_preds, auxiliary_truths)
         
     return data, rollout_info
         
@@ -256,16 +303,16 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
     #Wrap model with an agent algorithm object
     # agent = algo.PPO(model, clip_param, ppo_epoch, num_mini_batch,
     try:
-        if new_aux:
-            agent = PPOAux(model, clip_param, ppo_epoch, num_mini_batch,
-                    value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
-                    eps=eps, max_grad_norm=max_grad_norm)
-        else:
-            base = globals()[agent_base]
-            agent = base(model, clip_param, ppo_epoch, num_mini_batch,
-                            value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
-                            eps=eps, max_grad_norm=max_grad_norm,
-                            take_optimizer_step=take_optimizer_step)
+        # if new_aux:
+        #     agent = PPOAux(model, clip_param, ppo_epoch, num_mini_batch,
+        #             value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
+        #             eps=eps, max_grad_norm=max_grad_norm)
+        # else:
+        base = globals()[agent_base]
+        agent = base(model, clip_param, ppo_epoch, num_mini_batch,
+                        value_loss_coef, entropy_coef, auxiliary_loss_coef, lr=lr,
+                        eps=eps, max_grad_norm=max_grad_norm,
+                        take_optimizer_step=take_optimizer_step)
     except:
         print('Model type not found')
         return False
@@ -273,7 +320,7 @@ def initialize_ppo_training(model=None, obs_rms=None, env_name='NavEnv-v0', env_
 
     #Initialize storage
     if new_aux:
-        rollouts = RolloutStorageAux(num_steps, num_processes, envs.observation_space.shape, envs.action_space,
+        rollouts = RolloutStorageAux(num_steps, num_processes, env.observation_space.shape, env.action_space,
                             model.recurrent_hidden_state_size, model.auxiliary_output_sizes,
                             auxiliary_truth_sizes)
     else:
@@ -333,7 +380,7 @@ def generate_storage(model, num_steps, num_processes, obs, env=None, env_name='N
 
 
 def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, num_layers=None,
-                             decompose_grads=False, data_callback=None):
+                             decompose_grads=False, data_callback=None, new_aux=False):
     """Main function to collect batches and grad
 
     Args:
@@ -385,8 +432,12 @@ def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, n
         
     
     for n in range(num_batches):
-        data, info = populate_rollouts(agent.actor_critic, envs, rollouts, rollouts.num_steps, seed=seed,
-                                 data_callback=data_callback)
+        if new_aux:
+            data, info = populate_rollouts_aux(agent.actor_critic, envs, rollouts, rollouts.num_steps, seed=seed,
+                                    data_callback=data_callback)            
+        else:            
+            data, info = populate_rollouts(agent.actor_critic, envs, rollouts, rollouts.num_steps, seed=seed,
+                                    data_callback=data_callback)
         
         agent.optimizer.zero_grad()
         next_value = agent.actor_critic.get_value(rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
@@ -1133,6 +1184,177 @@ class DecomposeGradPPO():
                     action_loss,
                     auxiliary_loss*self.auxiliary_loss_coef,
                     -dist_entropy
+                ]
+                grads = defaultdict(list)
+                
+                for i, loss in enumerate(losses):
+                    name = loss_names[i]
+                    self.optimizer.zero_grad()
+                    if loss.grad_fn != None:
+                        loss.backward(retain_graph=True)
+                    for param in params:
+                        if param.grad == None:
+                            grad = torch.zeros(param.shape)
+                        else:
+                            grad = param.grad.clone()
+                        grads[name].append(grad)
+                                
+                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                                         self.max_grad_norm)
+                if self.take_optimizer_step:
+                    self.optimizer.step()
+
+                value_loss_epoch += value_loss.item()
+                action_loss_epoch += action_loss.item()
+                dist_entropy_epoch += dist_entropy.item()
+                auxiliary_loss_epoch += auxiliary_loss.item()
+
+        num_updates = self.ppo_epoch * self.num_mini_batch
+
+        value_loss_epoch /= num_updates
+        action_loss_epoch /= num_updates
+        dist_entropy_epoch /= num_updates
+
+
+
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, \
+            approx_kl, clipfracs, auxiliary_loss_epoch, grads
+            
+            
+            
+            
+class DecomposeGradPPOAux():
+    '''
+    Variation on our trainer object that further keeps track of grads induced
+    by each individual loss and returns them on the update function
+    Note this is going to assume that we only have one single ppo_epoch and one
+    minibatch 
+    '''
+    def __init__(self,
+                 actor_critic,
+                 clip_param,
+                 ppo_epoch,
+                 num_mini_batch,
+                 value_loss_coef,
+                 entropy_coef,
+                 auxiliary_loss_coef=0,
+                 lr=None,
+                 eps=None,
+                 max_grad_norm=None,
+                 use_clipped_value_loss=True,
+                 verbose=False,
+                 take_optimizer_step=True):
+
+        self.actor_critic = actor_critic
+        self.auxiliary_types = actor_critic.base.auxiliary_layer_types
+        self.cross_entropy_loss = nn.CrossEntropyLoss() #used for multiclass aux loss
+
+        self.clip_param = clip_param
+        self.ppo_epoch = ppo_epoch
+        self.num_mini_batch = num_mini_batch
+
+        self.value_loss_coef = value_loss_coef
+        self.entropy_coef = entropy_coef
+        self.auxiliary_loss_coef = auxiliary_loss_coef
+
+        self.max_grad_norm = max_grad_norm
+        self.use_clipped_value_loss = use_clipped_value_loss
+
+        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
+        
+        #Additional parameter that allows us to skip taking optimizer step so that
+        #we can keep trajectories same for different batch sizes
+        self.take_optimizer_step = take_optimizer_step
+        self.verbose = verbose
+
+    def update(self, rollouts):
+        advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
+        advantages = (advantages - advantages.mean()) / (
+            advantages.std() + 1e-5)
+
+        value_loss_epoch = 0
+        action_loss_epoch = 0
+        dist_entropy_epoch = 0
+        auxiliary_loss_epoch = 0
+
+        clipfracs = []
+        explained_vars = []
+        
+        num_update_steps = 0
+        for e in range(self.ppo_epoch):
+            if self.actor_critic.is_recurrent:
+                data_generator = rollouts.recurrent_generator(
+                    advantages, self.num_mini_batch)
+            else:
+                data_generator = rollouts.feed_forward_generator(
+                    advantages, self.num_mini_batch)
+
+            for sample in data_generator:
+                num_update_steps += 1
+                if self.verbose:
+                    print(num_update_steps)
+                obs_batch, recurrent_hidden_states_batch, actions_batch, \
+                   value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
+                    adv_targ, auxiliary_pred_batch, auxiliary_truth_batch = sample
+
+                # Reshape to do in a single forward pass for all steps
+                values, action_log_probs, dist_entropy, _, auxiliary_preds = self.actor_critic.evaluate_actions(
+                    obs_batch, recurrent_hidden_states_batch, masks_batch,
+                    actions_batch)
+
+                logratio = action_log_probs - old_action_log_probs_batch 
+                ratio = torch.exp(logratio)
+                surr1 = ratio * adv_targ
+                surr2 = torch.clamp(ratio, 1.0 - self.clip_param,
+                                    1.0 + self.clip_param) * adv_targ
+                action_loss = -torch.min(surr1, surr2).mean()
+
+                #Andy: compute approx kl
+                with torch.no_grad():
+                    # old_approx_kl = (-logratio).mean()
+                    approx_kl = ((ratio - 1) - logratio).mean()
+                    clipfracs += [
+                        ((ratio - 1.0).abs() > self.clip_param).float().mean().item()
+                    ]
+
+                if self.use_clipped_value_loss:
+                    value_pred_clipped = value_preds_batch + \
+                        (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+                    value_losses = (values - return_batch).pow(2)
+                    value_losses_clipped = (
+                        value_pred_clipped - return_batch).pow(2)
+                    value_loss = 0.5 * torch.max(value_losses,
+                                                 value_losses_clipped).mean()
+                else:
+                    value_loss = 0.5 * (return_batch - values).pow(2).mean()
+                
+                if self.actor_critic.has_auxiliary:
+                    auxiliary_losses = torch.zeros(len(self.auxiliary_types))
+                    for i, aux_type in enumerate(self.auxiliary_types):
+                        if aux_type == 0:
+                            # auxiliary_loss += 0.5 * (auxiliary_truth_batch[i] - auxiliary_preds[i]).pow(2).mean()
+                            auxiliary_losses[i] += 0.5 * (auxiliary_truth_batch[i] - auxiliary_preds[i]).pow(2).mean()
+                        elif aux_type == 1:
+                            # auxiliary_loss += self.cross_entropy_loss(auxiliary_preds[i], auxiliary_truth_batch[i])
+                            auxiliary_losses[i] += self.cross_entropy_loss(auxiliary_preds[i], auxiliary_truth_batch[i].long().squeeze())
+                    auxiliary_loss = auxiliary_losses.sum()
+                else:
+                    auxiliary_loss = torch.zeros(1)
+                # print(auxiliary_truth_batch, auxiliary_preds, auxiliary_loss)
+
+
+                # (value_loss * self.value_loss_coef + action_loss + 
+                #  auxiliary_loss * self.auxiliary_loss_coef -
+                #  dist_entropy * self.entropy_coef).backward()             
+                params = list(self.actor_critic.parameters())
+                num_param_layers = len(params)
+
+                loss_names = ['value', 'action', 'auxiliary', 'entropy']
+                losses = [
+                    value_loss*self.value_loss_coef,
+                    action_loss,
+                    auxiliary_loss*self.auxiliary_loss_coef,
+                    -dist_entropy*self.entropy_coef
                 ]
                 grads = defaultdict(list)
                 

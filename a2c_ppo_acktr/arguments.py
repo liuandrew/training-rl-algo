@@ -278,6 +278,12 @@ def get_args():
              '"clone_layers": list of layers that we want to clone or int of first n layers\n' + \
              '"freeze": boolean of whether to freeze the cloned layers. True/False or list for each layer in list')
 
+    #Andy: One speicifc experiment to see if we remove non-val grads from shared layer,
+    # is there actually a reduction in performance
+    parser.add_argument('--remove-actor-grads-on-shared', type=lambda x:bool(strtobool(x)), default=False, nargs='?', const=True,
+        help='if toggled, only use value grads for shared layers')
+
+
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
