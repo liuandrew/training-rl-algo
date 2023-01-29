@@ -212,7 +212,8 @@ def load_checkpoint(experiment, trial=None, checkpoint=None, base_folder='../tra
 
 def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
           data_callback=None, capture_video=False, verbose=0, with_activations=False,
-          seed=1, deterministic=True, normalize=True, aux_wrapper_kwargs={}):
+          seed=1, deterministic=True, normalize=True, aux_wrapper_kwargs={}, new_aux=False,
+          auxiliary_truth_sizes=[]):
     '''
     Evaluate using the current global model, obs_rms, and env_kwargs
     Load ep_ends, ep_lens into global vars to be used by get_ep
@@ -228,7 +229,8 @@ def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
     results = evaluate(model, obs_rms, env_name, seed, 1, eval_log_dir, device, 
          env_kwargs=env_kwargs, data_callback=data_callback, num_episodes=n, capture_video=capture_video,
          verbose=verbose, with_activations=with_activations, deterministic=deterministic,
-         normalize=normalize, aux_wrapper_kwargs=aux_wrapper_kwargs)
+         normalize=normalize, aux_wrapper_kwargs=aux_wrapper_kwargs,
+         new_aux=new_aux, auxiliary_truth_sizes=auxiliary_truth_sizes)
 
     #ep_ends and ep_lens used to easily pull data for single episodes
     results['ep_ends'] = np.where(np.array(results['dones']).flatten())[0]

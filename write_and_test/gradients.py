@@ -422,14 +422,27 @@ def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, n
     if decompose_grads:
         grad_types = ['value', 'action', 'auxiliary', 'entropy']
         all_grads = {name: [] for name in grad_types}
-        for name in grad_types:
-            for i in range(num_layers):
-                all_grads[name].append([])
+        if agent.ppo_epoch > 1:
+            for name in grad_types:
+                for e in range(agent.ppo_epoch):
+                    all_grads[name].append([])
+                    for i in range(num_layers):
+                        all_grads[name][e].append([])
+        else:
+            for name in grad_types:
+                for i in range(num_layers):
+                    all_grads[name].append([])
     else:
         all_grads = []
-        for i in range(num_layers):
-            all_grads.append([])
-        
+        if agent.ppo_epoch > 1:
+            for e in range(agent.ppo_epoch):
+                all_grads.append([])
+                for i in range(num_layers):
+                    all_grads[e].append([])
+        else:
+            for i in range(num_layers):
+                all_grads.append([])
+            
     
     for n in range(num_batches):
         if new_aux:
@@ -448,15 +461,18 @@ def collect_batches_and_grads(agent, envs, rollouts, num_batches=1, seed=None, n
         if decompose_grads:
             value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
                 grads = agent.update(rollouts)
-            
-            for name in grad_types:
-                for i in range(num_layers):
-                    all_grads[name][i].append(grads[name][i])
+            if agent.ppo_epoch > 1:
+                for name in grad_types:
+                    for e in range(agent.ppo_epoch):
+                        for i in range(num_layers):
+                            all_grads[name][e][i].append(grads[e][name][i])
+            else:
+                for name in grad_types:
+                    for i in range(num_layers):
+                        all_grads[name][i].append(grads[name][i])
         else:
-            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
-
-            for i in range(num_layers):
-                all_grads[i].append(params[i].grad.clone())
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                all_grads = agent.update(rollouts)
             
         rew = rollouts.rewards
         rewarded.append((rew != 0).any().item())
@@ -902,9 +918,10 @@ def cos_sim_grad(grads1, grads2, use_layer_subset=None, pairwise=True,
             grad2 = grad_pair[1]
             if pairwise:
                 # If pairwise is True, compare every batch to every other batch gradient
-                cs = np.triu(cosine_similarity(grad1, grad2), k=1)
-                cs = cs[cs != 0]
-                cos_sims += list(cs)
+                # cs = np.triu(cosine_similarity(grad1, grad2), k=1)
+                # cs = cs[cs != 0]
+                cs = cosine_similarity(grad1, grad2)
+                cos_sims.append(cs)
             else:
                 # Otherwise only compare each gradient to its counterpart in the same batch
                 for j in range(len(grad1)):
@@ -913,6 +930,16 @@ def cos_sim_grad(grads1, grads2, use_layer_subset=None, pairwise=True,
                     cos_sims += list(cs)
                     
     return cos_sims
+
+
+
+def cos_sim_grad_layerwise(grads1, grads2):
+    """
+    Compare grads of two sets, both indexed by grads[layer][batch]
+    
+    Return cosine similarities indexed by layer
+    """
+    
 
           
 
@@ -981,7 +1008,10 @@ class LoudPPO():
         explained_vars = []
         
         num_update_steps = 0
+        grads = []
         for e in range(self.ppo_epoch):
+            grads.append([])
+            
             if self.actor_critic.is_recurrent:
                 data_generator = rollouts.recurrent_generator(
                     advantages, self.num_mini_batch)
@@ -1048,6 +1078,18 @@ class LoudPPO():
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
                 auxiliary_loss_epoch += auxiliary_loss.item()
+                
+                params = list(self.actor_critic.parameters())
+                num_param_layers = len(params)
+                for param in params:
+                    if param.grad == None:
+                        grad = torch.zeros(param.shape)
+                    else:
+                        grad = param.grad.clone()
+                    grads[e].append(grad)
+            
+            
+                
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
@@ -1058,7 +1100,7 @@ class LoudPPO():
 
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, \
-            approx_kl, clipfracs, auxiliary_loss_epoch
+            approx_kl, clipfracs, auxiliary_loss_epoch, grads
 
     
     
@@ -1118,7 +1160,11 @@ class DecomposeGradPPO():
         explained_vars = []
         
         num_update_steps = 0
+        
+        grads = []
         for e in range(self.ppo_epoch):
+            grads.append(defaultdict(list))
+
             if self.actor_critic.is_recurrent:
                 data_generator = rollouts.recurrent_generator(
                     advantages, self.num_mini_batch)
@@ -1185,7 +1231,6 @@ class DecomposeGradPPO():
                     auxiliary_loss*self.auxiliary_loss_coef,
                     -dist_entropy
                 ]
-                grads = defaultdict(list)
                 
                 for i, loss in enumerate(losses):
                     name = loss_names[i]
@@ -1197,7 +1242,7 @@ class DecomposeGradPPO():
                             grad = torch.zeros(param.shape)
                         else:
                             grad = param.grad.clone()
-                        grads[name].append(grad)
+                        grads[e][name].append(grad)
                                 
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
@@ -1214,6 +1259,9 @@ class DecomposeGradPPO():
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        
+        if len(grads) == 1:
+            grads = grads[0]
 
 
 
@@ -1281,7 +1329,11 @@ class DecomposeGradPPOAux():
         explained_vars = []
         
         num_update_steps = 0
+        
+        grads = []
         for e in range(self.ppo_epoch):
+            grads.append(defaultdict(list))
+            
             if self.actor_critic.is_recurrent:
                 data_generator = rollouts.recurrent_generator(
                     advantages, self.num_mini_batch)
@@ -1356,7 +1408,6 @@ class DecomposeGradPPOAux():
                     auxiliary_loss*self.auxiliary_loss_coef,
                     -dist_entropy*self.entropy_coef
                 ]
-                grads = defaultdict(list)
                 
                 for i, loss in enumerate(losses):
                     name = loss_names[i]
@@ -1368,7 +1419,7 @@ class DecomposeGradPPOAux():
                             grad = torch.zeros(param.shape)
                         else:
                             grad = param.grad.clone()
-                        grads[name].append(grad)
+                        grads[e][name].append(grad)
                                 
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
@@ -1386,7 +1437,8 @@ class DecomposeGradPPOAux():
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-
+        if len(grads) == 1:
+            grads = grads[0]
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, \
             approx_kl, clipfracs, auxiliary_loss_epoch, grads

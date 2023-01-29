@@ -8,7 +8,7 @@ from a2c_ppo_acktr.envs import make_vec_envs
 def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
              device, ret_info=1, capture_video=False, env_kwargs={}, data_callback=None,
              num_episodes=10, verbose=0, with_activations=False, deterministic=True,
-             normalize=True, aux_wrapper_kwargs={}):
+             normalize=True, aux_wrapper_kwargs={}, new_aux=False, auxiliary_truth_sizes=[]):
     '''
     ret_info: level of info that should be tracked and returned
     capture_video: whether video should be captured for episodes
@@ -104,8 +104,29 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
                 obs, action, reward, done, data)
         else:
             data = {}
+        if new_aux:
+            auxiliary_truths = [[] for i in range(len(actor_critic.auxiliary_output_sizes))]
+            for info in infos:
+                if 'auxiliary' in info and len(info['auxiliary']) > 0:
+                    for i, aux in enumerate(info['auxiliary']):
+                        auxiliary_truths[i].append(aux)
+            if len(auxiliary_truths) > 0:
+                auxiliary_truths = [torch.tensor(np.vstack(aux)) for aux in auxiliary_truths]
 
-        auxiliary_truths = []
+        else:
+            auxiliary_truths = []
+            for info in infos:
+                if 'auxiliary' in info:
+                        if len(info['auxiliary'] > 0):
+                            auxiliary_truths.append(info['auxiliary'])
+                        
+            if len(auxiliary_truths) > 0:
+                auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
+            else:
+                auxiliary_truths = None
+        
+        all_auxiliary_truths.append(auxiliary_truths)
+        
         for info in infos:
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
@@ -113,18 +134,7 @@ def evaluate(actor_critic, obs_rms, env_name, seed, num_processes, eval_log_dir,
                 if verbose >= 2:
                     print('ep ' + str(len(eval_episode_rewards)) + ' rew ' + \
                         str(info['episode']['r']))
-                    
-            if 'auxiliary' in info:
-                    if len(info['auxiliary'] > 0):
-                        auxiliary_truths.append(info['auxiliary'])
                         
-        if len(auxiliary_truths) > 0:
-            auxiliary_truths = torch.tensor(np.vstack(auxiliary_truths))
-        else:
-            auxiliary_truths = None
-        
-        all_auxiliary_truths.append(auxiliary_truths)
-
 
     # eval_envs.close()
     if verbose >= 1:
