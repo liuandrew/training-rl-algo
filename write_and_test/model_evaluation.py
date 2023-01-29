@@ -21,7 +21,6 @@ import xgboost as xgb
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 
-eval_log_dir = '/tmp/gym/_eval'
 device = torch.device("cpu")
 
 save_folder = 'plots/proof_of_concept/'
@@ -213,7 +212,7 @@ def load_checkpoint(experiment, trial=None, checkpoint=None, base_folder='../tra
 def evalu(model, obs_rms, n=100, env_name='NavEnv-v0', env_kwargs={},
           data_callback=None, capture_video=False, verbose=0, with_activations=False,
           seed=1, deterministic=True, normalize=True, aux_wrapper_kwargs={}, new_aux=False,
-          auxiliary_truth_sizes=[]):
+          auxiliary_truth_sizes=[], eval_log_dir='/tmp/gym/_eval'):
     '''
     Evaluate using the current global model, obs_rms, and env_kwargs
     Load ep_ends, ep_lens into global vars to be used by get_ep

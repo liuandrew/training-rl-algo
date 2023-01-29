@@ -171,7 +171,8 @@ if __name__ == '__main__':
                         continue
                     model, obs_rms = torch.load(chk_path/f'{chk}.pt')
                     res = evalu(model, obs_rms, env_kwargs=env_kwargs, new_aux=new_aux, 
-                        auxiliary_truth_sizes=[1], n=100, data_callback=nav_data_callback)
+                        auxiliary_truth_sizes=[1], n=100, data_callback=nav_data_callback,
+                        eval_log_dir='tmp')
                     
                     for key in list(res.keys()):
                         if key not in keep_keys:
