@@ -273,7 +273,8 @@ def plot_exp_df(df, smoothing=0.1):
 
         
 def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
-                label=None, cloud_alpha=0.1, ignore_first=16, color=None):
+                label=None, cloud_alpha=0.1, cloud_by='minmax', ignore_first=16, 
+                color=None, medians=False, div_x_by_mil=False, ls=None):
     '''
     Get the average over a bunch of trials of the same name
     
@@ -286,11 +287,20 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
     ret: if True, instead of plotting, return the xs, ys, min_x, max_x
     label: whether to plot with a label
     cloud_alpha: alpha to show cloud of trials (0 for invisible)
+    cloud_by: choose how cloud should be calculated. Options:
+        'minmax': plot the min and max performance
+        'iqr': plot interquartile range
+        'std': plot 1 standard deviation range
     ignore_first: ignore_first n elements to filter out noisy first data
+    medians: plot medians rather than means
+    div_x_by_mil: if True, divide x values by 1e6, so that we can label in the xlabel
+        that it was x10^6 instead of as part of xticks
+    ls: linestyle. e.g., '--' is close dash, (0, (5, 5)) is spaced dash
     '''
     shortcut_to_key = {
         'value_loss': 'losses/value_loss',
         'policy_loss': 'losses/policy_loss',
+        'aux_loss': 'losses/auxiliary_loss',
         'return': 'charts/episodic_return',
         'length': 'charts/episodic_length'
     }
@@ -357,14 +367,37 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
             ys[j] = inters[j](xs)
         
         if ret is False:
+            if medians:
+                y_mid = np.median(ys, axis=0)[ignore_first:]
+            else:
+                y_mid = np.mean(ys, axis=0)[ignore_first:]
+            
+            
+            if cloud_by == 'minmax':
+                cloud_low = np.min(ys, axis=0)[ignore_first:]
+                cloud_high = np.max(ys, axis=0)[ignore_first:]
+            elif cloud_by == 'iqr':
+                cloud_low = np.percentile(ys, 25, axis=0)[ignore_first:]
+                cloud_high = np.percentile(ys, 75, axis=0)[ignore_first:]
+            elif cloud_by == 'std':
+                std = np.std(ys, axis=0)[ignore_first:]
+                cloud_low = y_mid - std
+                cloud_high = y_mid + std
+            else:
+                raise('No proper cloud_by option given. Should be "minmax", "iqr", or "std"')
+
+            if div_x_by_mil:
+                xs = xs / 1000000
+
             if ewm:
                 if color is not None:
-                    ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
-                                ys.max(axis=0)[ignore_first:], alpha=cloud_alpha, color=color)
+                    ax.fill_between(xs[ignore_first:], cloud_low, 
+                                cloud_high, alpha=cloud_alpha, color=color)
                 else:
-                    ax.fill_between(xs[ignore_first:], ys.min(axis=0)[ignore_first:], 
-                                ys.max(axis=0)[ignore_first:], alpha=cloud_alpha)
-            h = ax.plot(xs[ignore_first:], ys.mean(axis=0)[ignore_first:], label=label, color=color)
+                    ax.fill_between(xs[ignore_first:], cloud_low, 
+                                cloud_high, alpha=cloud_alpha)
+                    
+            h = ax.plot(xs[ignore_first:], y_mid, label=label, color=color, ls=ls)
             return h
         else:
             return xs, ys, min_x, max_x

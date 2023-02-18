@@ -16,12 +16,13 @@ collect_processes = 100
 """Set up storage object
 """
 batch_sizes = [16, 32]
+# batch_sizes = [32]
 # aux_tasks = ['catfacewall', 'catquad', 'catwall01', 'catwall0', 'catwall1']
 # aux_tasks = ['wall0', 'wall1', 'wall01', 'goaldist', 'terminal']
 # auxiliary_truth_sizes = [[1], [1], [1, 1],  [1], [1]]
 
-aux_tasks = ['none', 'catfacewall', 'catquad', 'catwall01', 'catwall0', 'catwall1']
-
+# aux_tasks = ['none', 'catfacewall', 'catquad', 'catwall01', 'catwall0', 'catwall1']
+aux_tasks = ['rewexplore', 'rewdist']
 
 trials = range(10)
 # all_chks = {16: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150,
@@ -48,9 +49,9 @@ for i, batch in enumerate(batch_sizes):
     for aux in aux_tasks:
         all_res[batch][aux] = {}
         all_res_ref[batch][aux] = {}
-        for trial in trials:
-            all_res[batch][aux][trial] = {}
-            all_res_ref[batch][aux][trial] = {}
+        # for trial in trials:
+        #     all_res[batch][aux][trial] = {}
+        #     all_res_ref[batch][aux][trial] = {}
             
             
 if __name__ == '__main__':
@@ -59,7 +60,7 @@ if __name__ == '__main__':
             for trial in tqdm(trials):
                 print(f'Batch {batch}, aux {aux}, trial {trial}')
                 
-                '''Compute grads ref grads for categorical grads'''
+                '''A. Compute grads ref grads for categorical grads'''
                 
                 # exp_name = f'nav_pdistal_auxcat/nav_pdistal_batch{batch}aux{aux}coef1'
                 # exp_name_t = f'{exp_name}_t{trial}'
@@ -107,7 +108,7 @@ if __name__ == '__main__':
                 #     all_res_ref[batch][aux][trial][chk] = res
                 
                 
-                ''' Compute ref grads for old auxiliary task methods '''
+                '''B. Compute ref grads for old auxiliary task methods '''
                     
                 # exp_name = f'nav_pdistal_batchauxcoef1/nav_pdistal_batch{batch}aux{aux}coef1'
                 # exp_name_t = f'{exp_name}_t{trial}'
@@ -152,19 +153,51 @@ if __name__ == '__main__':
                 #     all_res_ref[batch][aux][trial][chk] = res
 
 
-                '''Collect trajectories'''
+                '''C. Collect trajectories'''
+                # chks = all_chks[batch]
+                
+                # new_aux = True
+                # if aux == 'none':
+                #     exp_name = f'nav_pdistal_batchaux/nav_pdistal_batch{batch}aux{aux}'
+                #     new_aux = False
+                # else:
+                #     exp_name = f'nav_pdistal_auxcat/nav_pdistal_batch{batch}aux{aux}coef1'
+                    
+                # exp_name_t = f'{exp_name}_t{trial}'
+                # env_kwargs = pickle.load(open(f'../trained_models/ppo/{exp_name}_env', 'rb'))
+                # chk_path = Path('../trained_models/checkpoint/')/exp_name_t
+                
+                # for chk in chks:
+                #     if chk in all_res[batch][aux][trial]:
+                #         continue
+                #     model, obs_rms = torch.load(chk_path/f'{chk}.pt')
+                #     res = evalu(model, obs_rms, env_kwargs=env_kwargs, new_aux=new_aux, 
+                #         auxiliary_truth_sizes=[1], n=100, data_callback=nav_data_callback,
+                #         eval_log_dir='tmp')
+                    
+                #     for key in list(res.keys()):
+                #         if key not in keep_keys:
+                #             del res[key]
+                            
+                #     all_res[batch][aux][trial][chk] = res
+                
+                
+                '''D. Collect trajectories for aux rewards'''
                 chks = all_chks[batch]
                 
-                new_aux = True
-                if aux == 'none':
-                    exp_name = f'nav_pdistal_batchaux/nav_pdistal_batch{batch}aux{aux}'
-                    new_aux = False
-                else:
-                    exp_name = f'nav_pdistal_auxcat/nav_pdistal_batch{batch}aux{aux}coef1'
+                new_aux = False
+                exp_name = f'nav_pdistal_batchaux/nav_pdistal_batch{batch}aux{aux}'
                     
                 exp_name_t = f'{exp_name}_t{trial}'
                 env_kwargs = pickle.load(open(f'../trained_models/ppo/{exp_name}_env', 'rb'))
                 chk_path = Path('../trained_models/checkpoint/')/exp_name_t
+                
+                if not chk_path.exists():
+                    print(f'{chk_path} does not exist')
+                    continue
+                else:
+                    if trial not in all_res[batch][aux]:
+                        all_res[batch][aux][trial] = {}
                 
                 for chk in chks:
                     if chk in all_res[batch][aux][trial]:
@@ -172,13 +205,18 @@ if __name__ == '__main__':
                     model, obs_rms = torch.load(chk_path/f'{chk}.pt')
                     res = evalu(model, obs_rms, env_kwargs=env_kwargs, new_aux=new_aux, 
                         auxiliary_truth_sizes=[1], n=100, data_callback=nav_data_callback,
-                        eval_log_dir='tmp')
+                        eval_log_dir='tmp', with_activations=True)
                     
-                    for key in list(res.keys()):
-                        if key not in keep_keys:
-                            del res[key]
-                            
-                    all_res[batch][aux][trial][chk] = res
+                    keep_res = {}
+                    for key in keep_keys:
+                        keep_res[key] = res[key]
+                    #additionally add shared activations
+                    activs = torch.vstack([activ['shared_activations'][0] for activ in res['activations']])
+                    keep_res['activs'] = activs
+                    
+                    all_res[batch][aux][trial][chk] = keep_res
+
+                
 
                 
             print('saving...')
@@ -188,14 +226,13 @@ if __name__ == '__main__':
             # pickle.dump(all_res, open(f'data/grads/aux_100grads', 'wb'))
             # pickle.dump(all_res_ref, open(f'data/grads/aux_100refgrads', 'wb'))
             
-            
-    '''Clone a condensed version of trajectory data by stacking arrays'''
+    '''for C and D: Clone a condensed version of trajectory data by stacking arrays'''
     condensed = {}
     for batch in batch_sizes:
         condensed[batch] = {}
         for aux in aux_tasks:
             condensed[batch][aux] = {}
-            for trial in trials:
+            for trial in all_res[batch][aux]:
                 condensed[batch][aux][trial] = {}
 
     for batch in all_res:
@@ -209,5 +246,5 @@ if __name__ == '__main__':
                     condensed[batch][aux][trial][chk]['data']['pos'] = np.vstack(all_res[batch][aux][trial][chk]['data']['pos'])
                     condensed[batch][aux][trial][chk]['data']['angle'] = np.vstack(all_res[batch][aux][trial][chk]['data']['angle'])
                     
-          
-    pickle.dump(condensed, open('data/trajectories/auxcatcoef1', 'wb'))
+        
+    pickle.dump(condensed, open('data/trajectories/auxrew_trajectories_activs', 'wb'))

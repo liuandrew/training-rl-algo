@@ -37,6 +37,9 @@ def color_cycle(cycle='default', idx=None):
     else:
         return rgb_colors
 
+# Run the color_cycle function so that rgb_colors are globally available for 
+#  any plotting functions from files that run this entire .py file
+rgb_colors = color_cycle()
 
 def activation_testing(model, env, x, y, angle):
     """

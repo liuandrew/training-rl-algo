@@ -510,7 +510,11 @@ class NavEnvFlat(gym.Env):
         if self.rew_structure == 'dist':
             goal = self.boxes[-1]
             dist_to_goal = self.sub_goal_reward * \
-                (MAX_LEN-dist(goal.center - self.character.pos)) / MAX_LEN
+                (self.max_goal_dist - dist(goal.center - self.character.pos)) / self.max_goal_dist
+                # Previously use max distance possible of entire pool, 
+                # now use max distance from goal possible
+                # (MAX_LEN-dist(goal.center - self.character.pos)) / MAX_LEN
+                
             reward += float(dist_to_goal)
             info['bonus_reward'] = float(dist_to_goal)
         elif self.rew_structure == 'explore': 
@@ -860,7 +864,7 @@ class NavEnvFlat(gym.Env):
             goal = Box(corner, goal_size, color=0, is_goal=True)            
             goal_walls, goal_wall_refs = self.get_walls([goal])
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
-            
+                        
             if self.task_structure == 2:
                 # For usual invisible fixed platform task, make the platform collidable
                 self.col_walls, self.col_wall_refs = walls + goal_walls, wall_refs + goal_wall_refs
@@ -868,7 +872,6 @@ class NavEnvFlat(gym.Env):
                 # For task where agent must take action when it thinks it is on goal, platform is not collidable
                 self.col_walls, self.col_wall_refs = walls, wall_refs
             self.boxes.append(goal)
-            
         elif self.task_structure == 3:
             #generate randomly positioned invisible goal
             #min distance of 10 from the walls
@@ -888,6 +891,10 @@ class NavEnvFlat(gym.Env):
             self.vis_walls, self.vis_wall_refs = walls, wall_refs
             self.col_walls, self.col_wall_refs = walls, wall_refs
 
+        goal_center = self.boxes[-1].center
+        max_x = max(WINDOW_SIZE[0]-goal_center[0], goal_center[0])
+        max_y = max(WINDOW_SIZE[1]-goal_center[1], goal_center[1])
+        self.max_goal_dist = dist([max_x, max_y])
             
 
         #generate character which must be at least some distance from the goal
