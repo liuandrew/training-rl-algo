@@ -580,7 +580,8 @@ def collect_batches_and_auxrew_grads(agent, envs, rollouts, num_batches=1, seed=
                 for i in range(num_layers):
                     all_grads_bonus[name][i].append(grads[name][i])
         else:
-            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                grads = agent.update(rollouts)
 
             for i in range(num_layers):
                 all_grads_bonus[i].append(params[i].grad.clone())
@@ -605,7 +606,8 @@ def collect_batches_and_auxrew_grads(agent, envs, rollouts, num_batches=1, seed=
                 for i in range(num_layers):
                     all_grads_bonus[name][i].append(grads[name][i])
         else:
-            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
+            value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                grads = agent.update(rollouts)
 
             for i in range(num_layers):
                 all_grads_goal[i].append(params[i].grad.clone())
@@ -627,7 +629,8 @@ def collect_batches_and_auxrew_grads(agent, envs, rollouts, num_batches=1, seed=
                     for i in range(num_layers):
                         all_grads_bonus[name][i].append(grads[name][i])
             else:
-                value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss = agent.update(rollouts)
+                value_loss, action_loss, dist_entropy, approx_kl, clipfracs, auxiliary_loss, \
+                    grads = agent.update(rollouts)
 
                 for i in range(num_layers):
                     all_grads_pure_bonus[i].append(params[i].grad.clone())

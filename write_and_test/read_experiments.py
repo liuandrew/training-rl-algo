@@ -274,7 +274,7 @@ def plot_exp_df(df, smoothing=0.1):
         
 def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
                 label=None, cloud_alpha=0.1, cloud_by='minmax', ignore_first=16, 
-                color=None, medians=False, div_x_by_mil=False, ls=None):
+                color=None, medians=False, div_x_by_mil=False, ls=None, verbose=False):
     '''
     Get the average over a bunch of trials of the same name
     
@@ -314,7 +314,7 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
     if len(folder) == 0:
         folder = '.'
     folder = base_folder/folder
-        
+    if verbose: print(folder)        
     trials = list(folder.iterdir())
     trial_names = [item.name.split('__')[0] for item in folder.iterdir()]
     trial_nums = [item.split('_')[-1] for item in trial_names]
@@ -325,13 +325,19 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
             
     if metric in shortcut_to_key:
         metric = shortcut_to_key[metric]
+
+    # for i, trial in enumerate(trial_names):
+    #     print(trials[i], trial == exp_name)
     
     if exp_name not in trial_names:
         print('No experiments with the given name found in runs folder')    
     else:
         # num_trials = exps[trial_name]
         trial_idxs = np.array(trial_names) == exp_name
+        if verbose: print(np.sum(trial_idxs))
         exps = np.array(trials)[trial_idxs]
+        
+        if verbose: print(exps)
                 
         # Averaging code same as from plot_cloud_from_dict in data_visualize.ipynb
         first_xs = []
@@ -342,7 +348,8 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
         for exp in exps:
             # Load df from run file
             # df = load_exp_df(trial_name, i)
-            
+            if verbose:
+                print(str(exp))
             df = load_exp_df(path=str(exp))
             df = df[df['metric'] == metric]
             if len(df) < 1:

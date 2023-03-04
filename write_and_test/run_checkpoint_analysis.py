@@ -12,6 +12,34 @@ import time
 # model, obs_rms, kwargs = load_model_and_env('nav_auxiliary_tasks/nav_aux_wall_1', 0)
 # env = gym.make('NavEnv-v0', **kwargs)
 
+
+'''Start points and copied trajectories for collect_checkpoint_data'''
+
+#Starting around rim - First generate start points and angles
+WINDOW_SIZE = (300, 300)
+step_size = 10.
+xs = np.arange(0+step_size, WINDOW_SIZE[0], step_size)
+ys = np.arange(0+step_size, WINDOW_SIZE[1], step_size)
+# thetas = np.linspace(0, 2*np.pi, 12, endpoint=False)
+start_points = []
+start_angles = []
+for x in xs:
+    for y in [5., 295.]:
+        point = np.array([x, y])
+        angle = np.arctan2(150 - y, 150 - x)
+        start_points.append(point)
+        start_angles.append(angle)
+for y in ys:
+    for x in [5, 295]:
+        point = np.array([x, y])
+        angle = np.arctan2(150 - y, 150 - x)
+        start_points.append(point)
+        start_angles.append(angle)
+        
+start_points = np.vstack(start_points)
+    
+combined_actions, keep_start_points, keep_start_angles = pickle.load(open(f'data/pdistal_rim_heatmap/width64_comb_acts', 'rb'))
+
 save = 'plots/representation_heatmaps/'
 
 from representation_analysis import *
@@ -111,6 +139,7 @@ def clean_eps(eps, prune_first=5, activations_key='shared_activations',
         pruned_ep_pseen = [p[prune_first:] for p in ep_pseen]
         pruned_pseen = np.concatenate(pruned_ep_pseen)
         pruned_ep_acts = [p[prune_first:] for p in ep_acts]
+        pruned_ep_acts = [[pi.item() for pi in p] for p in pruned_ep_acts]
         pruned_acts = np.concatenate(pruned_ep_acts)
         
         pos = pruned_pos
@@ -316,7 +345,8 @@ def count_labels(clabels, ignore_cluster=None, remove_zeros=False):
 def collect_checkpoint_data(trial_name, trial, data_folder='data/pdistal_widthaux_heatmap/',
                             checkpoint_folder='../trained_models/checkpoint/nav_pdistal_widthaux/',
                             model_folder='nav_pdistal_widthaux/',
-                            checkpoints=None):
+                            checkpoints=None, activations_key='shared_activations',
+                            activations_layer=0, add_random_eps=False):
     """Given an experimental trial_name and trial, load saved checkpoints and collect
     forced trajectory and natural trajectory data to 
 
@@ -326,6 +356,9 @@ def collect_checkpoint_data(trial_name, trial, data_folder='data/pdistal_widthau
         data_folder (str, optional): _description_. Defaults to 'data/pdistal_widthaux_heatmap/'.
         checkpoint_folder (str, optional): _description_. Defaults to '../trained_models/checkpoint/nav_pdistal_widthaux/'.
         model_folder (str, optional): _description_. Defaults to 'nav_pdistal_widthaux/'.
+        activations_key (str, optional)
+        activations_layer (int, optional)
+        add_random_eps (bool, optional): Whether to add random initial conditions in addition to rim conditions
     """
     print(f'Collecting trajectory data for {trial_name}:{trial}')
     start_time = time.time()
@@ -375,8 +408,10 @@ def collect_checkpoint_data(trial_name, trial, data_folder='data/pdistal_widthau
                                             env_kwargs=kw, data_callback=poster_data_callback,
                                             with_activations=True, forced_actions=copied_actions)
                 all_ep.append(ep)
+                
             eps = clean_eps(stack_all_ep(all_ep), prune_first=0, save_inview=False,
-                            save_seen=False)
+                            save_seen=False, activations_key=activations_key,
+                            activations_layer=activations_layer)
             checkpoint_data['copied'][trial][chkp_val] = eps
 
 
@@ -385,18 +420,145 @@ def collect_checkpoint_data(trial_name, trial, data_folder='data/pdistal_widthau
             for i in range(len(start_points)):
                 kw = kwargs.copy()
                 kw['fixed_reset'] = [start_points[i].copy(), start_angles[i].copy()]
-                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, eva
+                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, eval_log_dir='./',
                                             env_kwargs=kw, data_callback=poster_data_callback,
                                             with_activations=True)
                 all_ep.append(ep)
-            eps = clean_eps(stack_all_ep(all_ep), prune_first=0, save_inview=False, save_seen=False)
+            eps = clean_eps(stack_all_ep(all_ep), prune_first=0, save_inview=False, 
+                            save_seen=False, activations_key=activations_key,
+                            activations_layer=activations_layer)
 
             checkpoint_data['policy'][trial][chkp_val] = eps
+            
+            #Add 100 episodes of random starting point evaluation
+            if add_random_eps:
+                all_ep = []
+                ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=100, eval_log_dir='./',
+                                            env_kwargs=kwargs, data_callback=poster_data_callback,
+                                            with_activations=True)
+                    
+                eps = clean_eps(ep, activations_key='actor_activations', activations_layer=1,
+                        save_inview=False, save_seen=False)
+                
+                checkpoint_data['random'][trial][chkp_val] = eps
+
+            
             
             pickle.dump(checkpoint_data, open(save_path, 'wb'))
             
     end_time = time.time()
     print('Wall time:', round(end_time-start_time, 2))
+    
+    
+    
+    
+def collect_heatmap_activations(trial_name, trials=range(3), data_folder='data/pdistal_batchaux_heatmap/',
+                            checkpoint_folder='../trained_models/checkpoint/nav_pdistal_batchaux/',
+                            model_folder='nav_pdistal_batchaux/',
+                            checkpoints=None, add_random_eps=True):
+    """Given an experimental trial_name and trial, load saved checkpoints and collect
+    forced trajectory and natural trajectory data to 
+
+    Args:
+        trial_name (_type_): _description_
+        trial (_type_): _description_
+        data_folder (str, optional): _description_. Defaults to 'data/pdistal_widthaux_heatmap/'.
+        checkpoint_folder (str, optional): _description_. Defaults to '../trained_models/checkpoint/nav_pdistal_widthaux/'.
+        model_folder (str, optional): _description_. Defaults to 'nav_pdistal_widthaux/'.
+        activations_key (str, optional)
+        activations_layer (int, optional)
+        add_random_eps (bool, optional): Whether to add random initial conditions in addition to rim conditions
+    """
+    print('run collect_heatmap_activations')
+    save_path = data_folder + f'{trial_name}_checkpoint'
+    if not Path(save_path).exists():
+        checkpoint_data = {'copied': {}, 'policy': {}, 'random': {}}
+    else:
+        checkpoint_data = pickle.load(open(save_path, 'rb'))
+
+    
+    for trial in trials:
+        print(f'Collecting trajectory data for {trial_name}:{trial}')
+        start_time = time.time()
+        
+        path = checkpoint_folder + f'{trial_name}_t{trial}'
+        # Get env_kwargs
+        kwargs_name = f'../trained_models/ppo/{model_folder}{trial_name}_env'
+        # print(model_name)
+        # _, _, kwargs = load_model_and_env(model_name, trial)
+        kwargs = pickle.load(open(kwargs_name, 'rb'))
+
+            
+            
+        # Make sure trial exists in the data file
+        if trial not in checkpoint_data['copied']:
+            checkpoint_data['copied'][trial] = {}
+            checkpoint_data['policy'][trial] = {}
+            checkpoint_data['random'][trial] = {}
+        else:
+            print('Already completed, skipping')
+            continue
+
+        if checkpoints == None:
+            checkpoints = list(Path(path).iterdir())
+            checkpoints = [int(chk.name.split('.pt')[0]) for chk in checkpoints]
+
+        with torch.no_grad():
+            for chkp_val in tqdm(checkpoints):
+                if chkp_val in checkpoint_data['policy'][trial]:
+                    #already ran this checkpoint
+                    continue
+                
+                checkpoint = Path(path)/f'{chkp_val}.pt'
+                model, obs_rms = torch.load(checkpoint)
+
+                #Generate copied activations
+                all_ep = []
+                for i in range(len(keep_start_points)):
+                    copied_actions = lambda step: combined_actions[i][step]
+                    kw = kwargs.copy()
+                    kw['fixed_reset'] = [keep_start_points[i].copy(), keep_start_angles[i].copy()]
+                    ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, eval_log_dir='./',
+                                                env_kwargs=kw, data_callback=poster_data_callback,
+                                                with_activations=True, forced_actions=copied_actions)
+                    all_ep.append(ep)
+                    
+                eps = stack_all_ep(all_ep)
+                eps['activations'] = stack_activations(eps['activations'])
+                checkpoint_data['copied'][trial][chkp_val] = eps
+
+
+                #Generate policy activations
+                all_ep = []
+                for i in range(len(start_points)):
+                    kw = kwargs.copy()
+                    kw['fixed_reset'] = [start_points[i].copy(), start_angles[i].copy()]
+                    ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=1, eval_log_dir='./',
+                                                env_kwargs=kw, data_callback=poster_data_callback,
+                                                with_activations=True)
+                    all_ep.append(ep)
+                eps = stack_all_ep(all_ep)
+                eps['activations'] = stack_activations(eps['activations'])
+
+                checkpoint_data['policy'][trial][chkp_val] = eps
+                
+                #Add 100 episodes of random starting point evaluation
+                if add_random_eps:
+                    ep = forced_action_evaluate(model, obs_rms, seed=0, num_episodes=100, eval_log_dir='./',
+                                                env_kwargs=kwargs, data_callback=poster_data_callback,
+                                                with_activations=True)
+                    eps = stack_all_ep([ep])
+                    eps['activations'] = stack_activations(eps['activations'])
+                    
+                    checkpoint_data['random'][trial][chkp_val] = eps
+
+            end_time = time.time()
+            print('Wall time:', round(end_time-start_time, 2))
+                
+            
+        pickle.dump(checkpoint_data, open(save_path, 'wb'))
+            
+    
         
 
 def compute_heatmaps(trial_name, trial, data_folder='data/pdistal_widthaux_heatmap/'):
@@ -508,31 +670,8 @@ if __name__ == '__main__':
         forced trajectories
     start_points, start_angles used for natural policies
     '''
-    combined_actions, keep_start_points, keep_start_angles = pickle.load(open(f'data/pdistal_rim_heatmap/width64_comb_acts', 'rb'))
 
-    #Starting around rim - First generate start points and angles
-    WINDOW_SIZE = (300, 300)
-    step_size = 10.
-    xs = np.arange(0+step_size, WINDOW_SIZE[0], step_size)
-    ys = np.arange(0+step_size, WINDOW_SIZE[1], step_size)
-    # thetas = np.linspace(0, 2*np.pi, 12, endpoint=False)
-    start_points = []
-    start_angles = []
-    for x in xs:
-        for y in [5., 295.]:
-            point = np.array([x, y])
-            angle = np.arctan2(150 - y, 150 - x)
-            start_points.append(point)
-            start_angles.append(angle)
-    for y in ys:
-        for x in [5, 295]:
-            point = np.array([x, y])
-            angle = np.arctan2(150 - y, 150 - x)
-            start_points.append(point)
-            start_angles.append(angle)
-            
-    start_points = np.vstack(start_points)
-    
+
     # Settings for origianl pdistal_width{width}batch200 trials
     
     # checkpoint_folder = '../trained_models/checkpoint/nav_poster_netstructure/'
@@ -567,32 +706,79 @@ if __name__ == '__main__':
     #             compute_heatmaps(trial_name, t, data_folder=data_folder)
     #             compute_summary_stats(trial_name, t, data_folder=data_folder)
                 
+
+    '''Old settings'''                
+    # # Settings for auxiliary task pdistal_width16batchaux
+    # num_trials = 3
+    # # widths = [16, 32, 64]
+    # batch_sizes = [8, 16, 32, 64, 96, 128]
+    # checkpoints = [
+    #     [0, 320, 640, 960, 1280, 1600, 1920, 2240, 2560, 2880, 3200, 3749],
+    #     [0, 160, 320, 480, 640, 800, 960, 1120, 1280, 1440, 1600, 1760, 1874],
+    #     [0, 80, 160, 240, 320, 400, 480, 560, 640, 720, 800, 880, 936],
+    #     [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 467],
+    #     [0, 30, 60, 80, 110, 140, 170, 200, 220, 250, 280, 300, 311],
+    #     [0, 20, 40, 80, 100, 120, 140, 160, 180, 200, 220, 233],
+    # ]
+    
+    # auxiliary_task_names = ['wall0', 'wall1', 'wall01', 'goaldist', 'none']
+    # checkpoint_folder = '../trained_models/checkpoint/nav_pdistal_batchaux/'
+    # data_folder = 'data/pdistal_batchaux_heatmap/'
+    # model_folder = 'nav_pdistal_batchaux/'
+    
+    # for t in range(num_trials):
+    #     for n, batch in enumerate(batch_sizes):
+    #         for aux in auxiliary_task_names:
+    #             trial_name = f'nav_pdistal_batch{batch}aux{aux}'
+    #             collect_checkpoint_data(trial_name, t, data_folder=data_folder,
+    #                                     checkpoint_folder=checkpoint_folder,
+    #                                     model_folder=model_folder,
+    #                                     checkpoints=checkpoints[n])
+    #             compute_heatmaps(trial_name, t, data_folder=data_folder)
+    #             compute_summary_stats(trial_name, t, data_folder=data_folder)
                 
+                
+    '''New settings. Collect 100 random initialization episodes, as well as all activations'''    
     # Settings for auxiliary task pdistal_width16batchaux
-    num_trials = 3
-    # widths = [16, 32, 64]
-    batch_sizes = [8, 16, 32, 64, 96, 128]
-    checkpoints = [
-        [0, 320, 640, 960, 1280, 1600, 1920, 2240, 2560, 2880, 3200, 3749],
-        [0, 160, 320, 480, 640, 800, 960, 1120, 1280, 1440, 1600, 1760, 1874],
-        [0, 80, 160, 240, 320, 400, 480, 560, 640, 720, 800, 880, 936],
-        [0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 467],
-        [0, 30, 60, 80, 110, 140, 170, 200, 220, 250, 280, 300, 311],
-        [0, 20, 40, 80, 100, 120, 140, 160, 180, 200, 220, 233],
-    ]
-    
+    trials = range(10)
+    batch_sizes = [16, 32]
+    all_chks = {16: [0, 50, 100, 150, 300, 600, 1000, 1500],
+                32: [0, 20, 40, 80, 150, 300, 600, 900]}
+        
     auxiliary_task_names = ['wall0', 'wall1', 'wall01', 'goaldist', 'none']
-    checkpoint_folder = '../trained_models/checkpoint/nav_pdistal_batchaux/'
     data_folder = 'data/pdistal_batchaux_heatmap/'
-    model_folder = 'nav_pdistal_batchaux/'
     
-    for t in range(num_trials):
-        for n, batch in enumerate(batch_sizes):
-            for aux in auxiliary_task_names:
+    aux_types = ['control', 'num', 'cat', 'rew']
+    all_aux_tasks = {
+        'control': ['none'],
+        'num': ['wall0coef1', 'wall1coef1', 'wall01coef1', 'goaldistcoef1', 'terminalcoef1'],
+        'cat': ['catfacewallcoef1', 'catquadcoef1', 'catwall01coef1', 'catwall0coef1', 'catwall1coef1'],
+        'rew': ['rewexplore', 'rewdistscale0015']        
+    }
+    model_folders = {
+        'control': 'nav_pdistal_batchaux/',
+        'num': 'nav_pdistal_batchauxcoef1/',
+        'cat': 'nav_pdistal_auxcatcoef1/',
+        'rew': 'nav_pdistal_batchaux/'
+    }
+    checkpoint_folders = {
+        'control': '../trained_models/checkpoint/nav_pdistal_batchaux/',
+        'num': '../trained_models/checkpoint/nav_pdistal_batchauxcoef1/',
+        'cat': '../trained_models/checkpoint/nav_pdistal_auxcatcoef1/',
+        'rew': '../trained_models/checkpoint/nav_pdistal_batchaux/'
+    }
+    
+    for typ in aux_types:
+        print('Collecting heatmap data for ' + typ)
+        aux_tasks = all_aux_tasks[typ]
+        model_folder = model_folders[typ]
+        checkpoint_folder = checkpoint_folders[typ]
+        
+        for aux in tqdm(aux_tasks):
+            for batch in batch_sizes:
+                chks = all_chks[batch]
                 trial_name = f'nav_pdistal_batch{batch}aux{aux}'
-                collect_checkpoint_data(trial_name, t, data_folder=data_folder,
+                collect_heatmap_activations(trial_name, trials, data_folder=data_folder,
                                         checkpoint_folder=checkpoint_folder,
                                         model_folder=model_folder,
-                                        checkpoints=checkpoints[n])
-                compute_heatmaps(trial_name, t, data_folder=data_folder)
-                compute_summary_stats(trial_name, t, data_folder=data_folder)
+                                        checkpoints=chks)
