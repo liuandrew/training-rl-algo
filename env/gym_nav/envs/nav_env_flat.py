@@ -50,6 +50,155 @@ def dist(v):
 
 
 
+# class Character:
+#     def __init__(self, pos=[WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2], angle=0, color=4, size=10,
+#                 fov=120*DEG_TO_RAD, num_rays=30, render_rays=True):
+#         '''
+#         Generate a character that can move through the window
+#         pos: starting position
+#         angle: starting angle (radians) angle always takes on values from -pi to pi
+#         color: color
+#         size: size
+#         fov: range of angles character can see using rays
+#         num_rays: fidelity of depth perception
+#         draw_rays: whether or not to draw the characters rays
+#         '''
+#         self.pos = pos
+#         self.angle = (angle + np.pi) % (2*np.pi) - np.pi
+#         self.color = color
+#         self.size = size
+#         self.fov = fov
+#         self.ray_splits = fov / num_rays
+#         self.render_rays = render_rays
+#         self.num_rays = num_rays
+        
+#         self.rays = []
+        
+#         fov_start = self.angle - self.fov/2
+#         for i in range(num_rays):
+#             self.rays.append(Ray(self.pos, fov_start + i*self.ray_splits))
+    
+    
+#     def update_rays(self, vis_walls=[], vis_wall_refs=[]):
+#         '''
+#         update the angle of the rays using own position and angle
+#         '''
+#         fov_start = self.angle - self.fov/2
+#         for i in range(self.num_rays):
+#             self.rays[i].update(start=self.pos, angle=fov_start + i*self.ray_splits, vis_walls=vis_walls, vis_wall_refs=vis_wall_refs)
+            
+            
+#     def draw_rays(self, ax=None):
+#         '''
+#         draw the rays coming from character
+#         '''
+#         for ray in self.rays:
+#             ray.draw(ax=ax)
+        
+    
+#     def draw(self, ax=None):
+#         '''
+#         draw the character
+#         '''
+#         angle1 = self.angle - 0.3
+#         angle2 = self.angle + 0.3
+#         point1 = [self.pos[0], self.pos[1]]
+#         point2 = [self.pos[0] - math.cos(angle1)*self.size, self.pos[1] - math.sin(angle1)*self.size]
+#         point3 = [self.pos[0] - math.cos(angle2)*self.size, self.pos[1] - math.sin(angle2)*self.size]
+
+#         draw_color = idx_to_rgb[self.color]
+        
+#         poly = plt.Polygon([point1, point2, point3], fc=draw_color)
+#         if ax == None:
+#             plt.gca().add_patch(poly)
+#         else:
+#             ax.add_patch(poly)
+
+        
+#         if self.render_rays:
+#             self.draw_rays(ax=ax)
+        
+        
+#     def move(self, speed, col_walls, col_wall_refs, vis_walls, vis_wall_refs):
+#         '''
+#         move in the faced direction with number of pixels of speed
+#         collision detection uses the same ray marching algorithm
+#         after moving, update the rays
+        
+#         Note we have to pass the walls that can be collided with for movement
+#         '''
+#         start = self.pos
+#         end = [self.pos[0] + math.cos(self.angle) * speed, self.pos[1] + math.sin(self.angle) * speed]
+        
+#         min_dist, collision_obj = self.march(start, end, col_walls, col_wall_refs)
+
+#         if collision_obj == None:
+#             self.pos[0] += math.cos(self.angle) * speed
+#             self.pos[1] += math.sin(self.angle) * speed
+            
+#         else:
+#             min_dist = max(min_dist, speed * 0.1) # Make sure agent can't move backwards
+            
+#             self.pos[0] += math.cos(self.angle) * (min_dist - speed * 0.1)
+#             self.pos[1] += math.sin(self.angle) * (min_dist - speed * 0.1)
+#         self.update_rays(vis_walls, vis_wall_refs)
+
+#         return collision_obj
+            
+            
+#     def march(self, start, end, col_walls, col_wall_refs):
+#         '''
+#         perform ray march, find collision with col_walls
+#         '''
+#         intersects = []
+#         for col_wall in col_walls:
+#             intersects.append(intersect(start, end, col_wall[0], col_wall[1]))
+#         min_dist = np.inf
+#         min_idx = None
+#         for idx, inter in enumerate(intersects):
+#             if inter != None:
+#                 d = dist((inter[0]-start[0], inter[1]-start[1]))
+#                 if d < min_dist:
+#                     min_dist = d
+#                     min_idx = idx
+        
+#         if min_idx == None:
+#             return min_dist, min_idx
+#         else:
+#             return min_dist, col_wall_refs[min_idx]
+    
+        
+#     def rotate(self, angle, vis_walls, vis_wall_refs):
+#         self.angle += angle
+#         self.angle = (self.angle + np.pi) % (2*np.pi) - np.pi
+#         self.update_rays(vis_walls=vis_walls, vis_wall_refs=vis_wall_refs)
+        
+    
+#     def ray_obs(self, max_depth=MAX_LEN):
+#         '''
+#         Get all rays and their distances to objects
+#         normalize_depth: divide depth readings by value 
+#         '''
+#         ray_colors = []
+#         ray_depths = []
+#         for ray in self.rays:
+#             ray_colors.append(ray.touched_obj.color)
+#             ray_depths.append(ray.obj_dist)
+
+#         ray_colors = np.array(ray_colors) / 6
+#         ray_depths = np.array(ray_depths) / max_depth
+#         visual = np.append(ray_colors, ray_depths)
+#         return visual
+
+
+
+
+
+
+
+'''New version of character where rays are calculated as vectorized computation'''
+
+
 class Character:
     def __init__(self, pos=[WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2], angle=0, color=4, size=10,
                 fov=120*DEG_TO_RAD, num_rays=30, render_rays=True):
@@ -68,33 +217,89 @@ class Character:
         self.color = color
         self.size = size
         self.fov = fov
-        self.ray_splits = fov / num_rays
         self.render_rays = render_rays
         self.num_rays = num_rays
         
-        self.rays = []
+        self.ray_max_len = np.linalg.norm(WINDOW_SIZE)+100
+
         
-        fov_start = self.angle - self.fov/2
-        for i in range(num_rays):
-            self.rays.append(Ray(self.pos, fov_start + i*self.ray_splits))
     
-    
-    def update_rays(self, vis_walls=[], vis_wall_refs=[]):
+    def update_walls(self, vis_walls, vis_wall_refs, col_walls, col_wall_refs):
         '''
-        update the angle of the rays using own position and angle
+        Update references to walls. This should be called when the environment changes
+        or upon initialization
+        vis_walls: walls that can be seen by vision rays
+        col_walls: walls that can be collided with
         '''
-        fov_start = self.angle - self.fov/2
-        for i in range(self.num_rays):
-            self.rays[i].update(start=self.pos, angle=fov_start + i*self.ray_splits, vis_walls=vis_walls, vis_wall_refs=vis_wall_refs)
-            
-            
-    def draw_rays(self, ax=None):
-        '''
-        draw the rays coming from character
-        '''
-        for ray in self.rays:
-            ray.draw(ax=ax)
+        self.vis_walls = vis_walls
+        self.vis_wall_refs = np.array(vis_wall_refs)
         
+        self.col_walls = col_walls
+        self.col_wall_refs = np.array(col_wall_refs)
+        
+        #Walls organized into [x3, y3, x4, y4] which tell us where walls start and end
+        self.wall_p = np.array(vis_walls).reshape(-1, 4)
+        self.x3 = self.wall_p[:, 0].reshape(1, -1)
+        self.y3 = self.wall_p[:, 1].reshape(1, -1)
+        self.x4 = self.wall_p[:, 2].reshape(1, -1)
+        self.y4 = self.wall_p[:, 3].reshape(1, -1)
+        
+        #Same for collidable walls for collision detection
+        self.col_wall_p = np.array(col_walls).reshape(-1, 4)
+        self.cx3 = self.col_wall_p[:, 0].reshape(1, -1)
+        self.cy3 = self.col_wall_p[:, 1].reshape(1, -1)
+        self.cx4 = self.col_wall_p[:, 2].reshape(1, -1)
+        self.cy4 = self.col_wall_p[:, 3].reshape(1, -1)
+
+        
+    
+    def update_rays(self):
+        '''
+        Update ray intersection computations
+        This should be called every time the agent moves or turns
+        '''
+        fov_start = self.angle - self.fov/2
+        fov_end = fov_start + self.fov
+        
+        ray_angles = np.linspace(fov_start, fov_end, self.num_rays, endpoint=False)
+        ray_mults = np.array([np.cos(ray_angles), np.sin(ray_angles)]).T
+        ray_ends = ray_mults * self.ray_max_len + self.pos
+        ray_starts = np.full((self.num_rays, 2), self.pos)
+        
+        x1 = ray_starts[:, 0].reshape(-1, 1)
+        y1 = ray_starts[:, 1].reshape(-1, 1)
+        x2 = ray_ends[:, 0].reshape(-1, 1)
+        y2 = ray_ends[:, 1].reshape(-1, 1)
+        
+        #Compute intersect metrics
+        denom = (self.y4-self.y3)*(x2-x1) - (self.x4-self.x3)*(y2-y1)
+        ua = ((self.x4-self.x3)*(y1-self.y3) - (self.y4-self.y3)*(x1-self.x3)) / denom
+        ub = ((x2-x1)*(y1-self.y3) - (y2-y1)*(x1-self.x3)) / denom
+
+        #Compute x y intersects
+        x = x1 + ua*(x2-x1)
+        y = y1 + ua*(y2-y1)
+
+        #Compute distances to intersects
+        dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2)
+
+        #Only keep distances with valid intersects
+        mults = np.full(x.shape, 1.)
+        mults[((ua < 0) | (ua > 1) | (ub < 0) | (ub > 1))] = np.inf
+
+        wall_idxs = np.argmin(mults*dists, axis=1)
+        wall_idxs2 = np.stack([np.arange(self.num_rays), wall_idxs])
+
+        # inter_x = x[wall_idxs2[0], wall_idxs2[1]]
+        # inter_y = y[wall_idxs2[0], wall_idxs2[1]]
+
+        # Get distances, colors and a plottable        
+        self.ray_dists = dists[wall_idxs2[0], wall_idxs2[1]]
+        self.ray_colors = list(map(lambda x: x.color, self.vis_wall_refs[wall_idxs]))
+        self.ray_plot = np.stack([ray_ends, 
+                              np.array(list(self.pos)*len(ray_ends)).reshape(-1, 2)], 
+                              axis=1).reshape(-1, 2)
+            
     
     def draw(self, ax=None):
         '''
@@ -111,15 +316,14 @@ class Character:
         poly = plt.Polygon([point1, point2, point3], fc=draw_color)
         if ax == None:
             plt.gca().add_patch(poly)
+            plt.gca().plot(self.ray_plot)
         else:
             ax.add_patch(poly)
+            ax.plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
 
+       
         
-        if self.render_rays:
-            self.draw_rays(ax=ax)
-        
-        
-    def move(self, speed, col_walls, col_wall_refs, vis_walls, vis_wall_refs):
+    def move(self, speed):
         '''
         move in the faced direction with number of pixels of speed
         collision detection uses the same ray marching algorithm
@@ -130,7 +334,7 @@ class Character:
         start = self.pos
         end = [self.pos[0] + math.cos(self.angle) * speed, self.pos[1] + math.sin(self.angle) * speed]
         
-        min_dist, collision_obj = self.march(start, end, col_walls, col_wall_refs)
+        min_dist, collision_obj = self.march(start, end)
 
         if collision_obj == None:
             self.pos[0] += math.cos(self.angle) * speed
@@ -141,37 +345,54 @@ class Character:
             
             self.pos[0] += math.cos(self.angle) * (min_dist - speed * 0.1)
             self.pos[1] += math.sin(self.angle) * (min_dist - speed * 0.1)
-        self.update_rays(vis_walls, vis_wall_refs)
+        self.update_rays()
 
         return collision_obj
             
             
-    def march(self, start, end, col_walls, col_wall_refs):
+    def march(self, start, end):
         '''
-        perform ray march, find collision with col_walls
-        '''
-        intersects = []
-        for col_wall in col_walls:
-            intersects.append(intersect(start, end, col_wall[0], col_wall[1]))
-        min_dist = np.inf
-        min_idx = None
-        for idx, inter in enumerate(intersects):
-            if inter != None:
-                d = dist((inter[0]-start[0], inter[1]-start[1]))
-                if d < min_dist:
-                    min_dist = d
-                    min_idx = idx
+        March forward to check if there is collision with any walls
+        start: starting position
+        end: desired end position (may be stopped earlier if collision occurs)
+        col_walls: wall objects that can detect collision
+        col_wall_refs: corresponding wall object references
+        '''                
+        x1 = start[0]
+        y1 = start[1]
+        x2 = end[0]
+        y2 = end[1]
         
-        if min_idx == None:
-            return min_dist, min_idx
+        #Compute intersect metrics
+        denom = (self.cy4-self.cy3)*(x2-x1) - (self.cx4-self.cx3)*(y2-y1)
+        ua = ((self.cx4-self.cx3)*(y1-self.cy3) - (self.cy4-self.cy3)*(x1-self.cx3)) / denom
+        ub = ((x2-x1)*(y1-self.cy3) - (y2-y1)*(x1-self.cx3)) / denom
+
+        #Compute x y intersects
+        x = x1 + ua*(x2-x1)
+        y = y1 + ua*(y2-y1)
+
+        #Compute dists
+        dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2).squeeze()
+        
+
+        #Only keep distances with valid intersects
+        mults = np.full(x.shape, 1.)
+        mults[((ua < 0) | (ua > 1) | (ub < 0) | (ub > 1))] = np.inf
+
+        #Some intersection occurs
+        if (mults != np.inf).any():
+            min_idx = np.argmin(dists)
+            return dists[min_idx], self.col_wall_refs[min_idx]
         else:
-            return min_dist, col_wall_refs[min_idx]
+            return np.min(dists), None
+                    
     
         
-    def rotate(self, angle, vis_walls, vis_wall_refs):
+    def rotate(self, angle):
         self.angle += angle
         self.angle = (self.angle + np.pi) % (2*np.pi) - np.pi
-        self.update_rays(vis_walls=vis_walls, vis_wall_refs=vis_wall_refs)
+        self.update_rays()
         
     
     def ray_obs(self, max_depth=MAX_LEN):
@@ -179,17 +400,11 @@ class Character:
         Get all rays and their distances to objects
         normalize_depth: divide depth readings by value 
         '''
-        ray_colors = []
-        ray_depths = []
-        for ray in self.rays:
-            ray_colors.append(ray.touched_obj.color)
-            ray_depths.append(ray.obj_dist)
-
-        ray_colors = np.array(ray_colors) / 6
-        ray_depths = np.array(ray_depths) / max_depth
-        visual = np.append(ray_colors, ray_depths)
+        ray_colors = np.array(self.ray_colors) / 6
+        ray_dists = np.array(self.ray_dists) / max_depth
+        
+        visual = np.append(ray_colors, ray_dists)
         return visual
-
 
 
 
@@ -485,6 +700,10 @@ class NavEnvFlat(gym.Env):
         # self.auxiliary_tasks = [auxiliary_task_to_idx[task] for task in auxiliary_tasks]
         # print('auxiliary tasks', self.auxiliary_tasks)
         
+        # New Character class: need to pass walls
+        self.character.update_walls(self.vis_walls, self.vis_wall_refs,
+                            self.col_walls, self.col_wall_refs)
+        
     def step(self, action):
         reward = self.default_reward
         collision_obj = None
@@ -492,12 +711,11 @@ class NavEnvFlat(gym.Env):
         info = {}
         
         if action == 0:
-            self.character.rotate(-self.turn_speed, self.vis_walls, self.vis_wall_refs)
+            self.character.rotate(-self.turn_speed)
         if action == 1:
-            collision_obj = self.character.move(self.move_speed, self.col_walls, self.col_wall_refs,
-                                self.vis_walls, self.vis_wall_refs)
+            collision_obj = self.character.move(self.move_speed)
         if action == 2:
-            self.character.rotate(self.turn_speed, self.vis_walls, self.vis_wall_refs)
+            self.character.rotate(self.turn_speed)
         if action == 3:
             pass
         if action == 4 and self.task_structure == 5:
@@ -620,7 +838,7 @@ class NavEnvFlat(gym.Env):
         if self.task_structure == 4:
             self.change_target_grid()
         
-        self.character.update_rays(self.vis_walls, self.vis_wall_refs)
+        self.character.update_rays()
         observation = self.get_observation()
         self.initial_character_position = self.character.pos.copy()
         self.current_steps = 0
@@ -916,6 +1134,8 @@ class NavEnvFlat(gym.Env):
             angle = np.pi / 2
             
         self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
+        self.character.update_walls(self.vis_walls, self.vis_wall_refs,
+                                    self.col_walls, self.col_wall_refs)
 
 
     def reset_character_position(self):
@@ -950,8 +1170,9 @@ class NavEnvFlat(gym.Env):
             angle = np.random.uniform(0, 2*np.pi)
 
         self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
-        self.character.update_rays(self.vis_walls, self.vis_wall_refs)
-
+        self.character.update_walls(self.vis_walls, self.vis_wall_refs,
+                                    self.col_walls, self.col_wall_refs)
+        self.character.update_rays()
 
 
     def make_walls(self, thickness=1):
