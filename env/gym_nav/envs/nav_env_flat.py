@@ -287,7 +287,12 @@ class Character:
         mults = np.full(x.shape, 1.)
         mults[((ua < 0) | (ua > 1) | (ub < 0) | (ub > 1))] = np.inf
 
-        wall_idxs = np.argmin(mults*dists, axis=1)
+        #We get np.nan where lines are parallel which throws off the argmin
+        # Setting parallel to inf should fix the issue
+        vals = mults*dists
+        vals[np.isnan(vals)] = np.inf
+
+        wall_idxs = np.argmin(vals, axis=1)
         wall_idxs2 = np.stack([np.arange(self.num_rays), wall_idxs])
 
         # inter_x = x[wall_idxs2[0], wall_idxs2[1]]
@@ -540,7 +545,7 @@ class NavEnvFlat(gym.Env):
                 auxiliary_task_args=[], fixed_reset=[None, None],
                 character_reset_pos=0, turn_speed=0.2, move_speed=10,
                 num_actions=4, num_grid_slices=5, goal_size=20, goal_corner=None,
-                separate_aux_tasks=False):
+                separate_aux_tasks=False, poster_thickness=None):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -588,6 +593,10 @@ class NavEnvFlat(gym.Env):
         goal_size: size of goal as int or array
         goal_corner: array giving x and y position of bottom left corner. If None, use default world
             generator function values
+        separate_aux_tasks: !!must set to True to use new aux task learners that expect
+            a list of auxiliary outputs (e.g. PPOAux, RolloutStorageAux etc.)
+        poster_thickness: if given a value, set poster thickness to that value. Implemented
+            to draw plots where the poster is clearer
         
         '''
         super(NavEnvFlat, self).__init__()
@@ -638,7 +647,8 @@ class NavEnvFlat(gym.Env):
         self.num_grid_slices = num_grid_slices
         self.target_grid = 0
         self.last_reward = 0
-
+        self.poster_thickness = poster_thickness
+        
         observation_width = num_rays
         self.ray_obs_width = num_rays
         if give_dist:
@@ -1221,7 +1231,10 @@ class NavEnvFlat(gym.Env):
 
         # add poster
         if self.poster is not False:
-            p_thickness = thickness + 1
+            if self.poster_thickness != None:
+                p_thickness = self.poster_thickness
+            else:
+                p_thickness = thickness + 1
             p_length = 50
             p_half = 25
             midpoint = 300 / 2

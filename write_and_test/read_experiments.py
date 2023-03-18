@@ -164,15 +164,17 @@ def print_runs(folder='../runs/', prin=True, descriptions=False, ret=False,
                     original_experiment_names[exp_name] = d.name
             elif d.is_dir() and d.name not in ignore_dirs:
                 directories.append(d)
-        for key, value in unique_experiments.items():
-            if value > 1:
-                print(branch*depth + tee+'EXP', key + ':', value)
-            else:
-                print(branch*depth+tee+original_experiment_names[key])
+        if prin:
+            for key, value in unique_experiments.items():
+                if value > 1:
+                    print(branch*depth + tee+'EXP', key + ':', value)
+                else:
+                    print(branch*depth+tee+original_experiment_names[key])
         
         result_dict = unique_experiments.copy()
         for i, d in enumerate(directories):
-            print(branch*depth + tee+d.name)
+            if prin:
+                print(branch*depth + tee+d.name)
             sub_experiments = inner_print(d, depth+1)
             result_dict[d] = sub_experiments
         
