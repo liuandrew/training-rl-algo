@@ -272,7 +272,8 @@ class Character:
         y2 = ray_ends[:, 1].reshape(-1, 1)
         
         #Compute intersect metrics
-        denom = (self.y4-self.y3)*(x2-x1) - (self.x4-self.x3)*(y2-y1)
+        epsilon = 1e-8
+        denom = (self.y4-self.y3)*(x2-x1) - (self.x4-self.x3)*(y2-y1) + 1e-8
         ua = ((self.x4-self.x3)*(y1-self.y3) - (self.y4-self.y3)*(x1-self.x3)) / denom
         ub = ((x2-x1)*(y1-self.y3) - (y2-y1)*(x1-self.x3)) / denom
 
@@ -289,10 +290,9 @@ class Character:
 
         #We get np.nan where lines are parallel which throws off the argmin
         # Setting parallel to inf should fix the issue
-        vals = mults*dists
-        vals[np.isnan(vals)] = np.inf
+        dists[np.isnan(dists)] = np.inf
 
-        wall_idxs = np.argmin(vals, axis=1)
+        wall_idxs = np.argmin(mults*dists, axis=1)
         wall_idxs2 = np.stack([np.arange(self.num_rays), wall_idxs])
 
         # inter_x = x[wall_idxs2[0], wall_idxs2[1]]
@@ -368,8 +368,10 @@ class Character:
         x2 = end[0]
         y2 = end[1]
         
+        epsilon = 1e-8
+        
         #Compute intersect metrics
-        denom = (self.cy4-self.cy3)*(x2-x1) - (self.cx4-self.cx3)*(y2-y1)
+        denom = (self.cy4-self.cy3)*(x2-x1) - (self.cx4-self.cx3)*(y2-y1) + epsilon
         ua = ((self.cx4-self.cx3)*(y1-self.cy3) - (self.cy4-self.cy3)*(x1-self.cx3)) / denom
         ub = ((x2-x1)*(y1-self.cy3) - (y2-y1)*(x1-self.cx3)) / denom
 
@@ -380,11 +382,14 @@ class Character:
         #Compute dists
         dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2).squeeze()
         
-
         #Only keep distances with valid intersects
         mults = np.full(x.shape, 1.)
         mults[((ua < 0) | (ua > 1) | (ub < 0) | (ub > 1))] = np.inf
 
+        #We get np.nan where lines are parallel which throws off the argmin
+        # Setting parallel to inf should fix the issue
+        dists[np.isnan(dists)] = np.inf
+        
         #Some intersection occurs
         if (mults != np.inf).any():
             min_idx = np.argmin(dists)
