@@ -392,7 +392,7 @@ class Character:
         
         #Some intersection occurs
         if (mults != np.inf).any():
-            min_idx = np.argmin(dists)
+            min_idx = np.argmin(mults*dists)
             return dists[min_idx], self.col_wall_refs[min_idx]
         else:
             return np.min(dists), None
