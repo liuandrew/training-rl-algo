@@ -279,7 +279,7 @@ class Character:
 
         #Compute x y intersects
         x = x1 + ua*(x2-x1)
-        y = y1 + ua*(y2-y1)
+        y = y1 + ub*(y2-y1)
 
         #Compute distances to intersects
         dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2)
@@ -321,7 +321,7 @@ class Character:
         poly = plt.Polygon([point1, point2, point3], fc=draw_color)
         if ax == None:
             plt.gca().add_patch(poly)
-            plt.gca().plot(self.ray_plot)
+            plt.gca().plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
         else:
             ax.add_patch(poly)
             ax.plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
@@ -377,7 +377,7 @@ class Character:
 
         #Compute x y intersects
         x = x1 + ua*(x2-x1)
-        y = y1 + ua*(y2-y1)
+        y = y1 + ub*(y2-y1)
 
         #Compute dists
         dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2).squeeze()
