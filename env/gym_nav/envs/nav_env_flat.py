@@ -257,6 +257,7 @@ class Character:
         '''
         Update ray intersection computations
         This should be called every time the agent moves or turns
+        https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
         '''
         fov_start = self.angle - self.fov/2
         fov_end = fov_start + self.fov
@@ -277,9 +278,9 @@ class Character:
         ua = ((self.x4-self.x3)*(y1-self.y3) - (self.y4-self.y3)*(x1-self.x3)) / denom
         ub = ((x2-x1)*(y1-self.y3) - (y2-y1)*(x1-self.x3)) / denom
 
-        #Compute x y intersects
+        #Compute x y intersects (they ARE both supposed to be ua)
         x = x1 + ua*(x2-x1)
-        y = y1 + ub*(y2-y1)
+        y = y1 + ua*(y2-y1)
 
         #Compute distances to intersects
         dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2)
@@ -377,7 +378,7 @@ class Character:
 
         #Compute x y intersects
         x = x1 + ua*(x2-x1)
-        y = y1 + ub*(y2-y1)
+        y = y1 + ua*(y2-y1)
 
         #Compute dists
         dists = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2).squeeze()
