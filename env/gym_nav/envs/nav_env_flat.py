@@ -219,7 +219,7 @@ class Character:
         self.fov = fov
         self.render_rays = render_rays
         self.num_rays = num_rays
-        self.one_hot_obs = one_hot_obs        
+        self.one_hot_obs = one_hot_obs
         self.ray_max_len = np.linalg.norm(WINDOW_SIZE)+100
 
         
@@ -1178,7 +1178,7 @@ class NavEnvFlat(gym.Env):
             pos = np.array([150., 150.])
             angle = np.pi / 2
             
-        self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
+        self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov, one_hot_obs=self.one_hot_obs)
         self.character.update_walls(self.vis_walls, self.vis_wall_refs,
                                     self.col_walls, self.col_wall_refs)
 
@@ -1214,7 +1214,8 @@ class NavEnvFlat(gym.Env):
         if angle == None:
             angle = np.random.uniform(0, 2*np.pi)
 
-        self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov)
+        self.character = Character(pos, angle, num_rays=self.num_rays, fov=self.fov,
+                                   one_hot_obs=self.one_hot_obs)
         self.character.update_walls(self.vis_walls, self.vis_wall_refs,
                                     self.col_walls, self.col_wall_refs)
         self.character.update_rays()
