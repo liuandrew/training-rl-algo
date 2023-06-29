@@ -276,7 +276,8 @@ def plot_exp_df(df, smoothing=0.1):
         
 def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
                 label=None, cloud_alpha=0.1, cloud_by='minmax', ignore_first=16, 
-                color=None, medians=False, div_x_by_mil=False, ls=None, verbose=False):
+                color=None, medians=False, div_x_by_mil=False, ls=None, verbose=False,
+                ignore_trial_idxs=[], skip_indexing=1):
     '''
     Get the average over a bunch of trials of the same name
     
@@ -298,6 +299,8 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
     div_x_by_mil: if True, divide x values by 1e6, so that we can label in the xlabel
         that it was x10^6 instead of as part of xticks
     ls: linestyle. e.g., '--' is close dash, (0, (5, 5)) is spaced dash
+    ignore_trial_idxs: list of indexes to not include, for example if removing outliers
+    skip_indexing: number of steps to skip by to compress plot
     '''
     shortcut_to_key = {
         'value_loss': 'losses/value_loss',
@@ -319,6 +322,17 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
     if verbose: print(folder)        
     trials = list(folder.iterdir())
     trial_names = [item.name.split('__')[0] for item in folder.iterdir()]
+    
+    #Remove any trial names without numbers (not a trial folder)
+    keep_trial_names = []
+    keep_trials = []
+    for i, name in enumerate(trial_names):
+        if re.search('\d+', name):
+            keep_trial_names.append(name)
+            keep_trials.append(trials[i])
+    trial_names = keep_trial_names
+    trials = keep_trials
+    
     trial_nums = [item.split('_')[-1] for item in trial_names]
     trial_names = ['_'.join(item.split('_')[:-1]) for item in trial_names]
     # print(trial_names)
@@ -347,7 +361,9 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
         inters = []
         num_trials = 0        
         
-        for exp in exps:
+        for i, exp in enumerate(exps):
+            if i in ignore_trial_idxs:
+                continue
             # Load df from run file
             # df = load_exp_df(trial_name, i)
             if verbose:
@@ -400,13 +416,13 @@ def average_runs(trial_name, metric='return', ax=None, ret=False, ewm=0.01,
 
             if ewm:
                 if color is not None:
-                    ax.fill_between(xs[ignore_first:], cloud_low, 
-                                cloud_high, alpha=cloud_alpha, color=color)
+                    ax.fill_between(xs[ignore_first:][::skip_indexing], cloud_low[::skip_indexing], 
+                                cloud_high[::skip_indexing], alpha=cloud_alpha, color=color)
                 else:
-                    ax.fill_between(xs[ignore_first:], cloud_low, 
-                                cloud_high, alpha=cloud_alpha)
+                    ax.fill_between(xs[ignore_first:][::skip_indexing], cloud_low[::skip_indexing], 
+                                cloud_high[::skip_indexing], alpha=cloud_alpha)
                     
-            h = ax.plot(xs[ignore_first:], y_mid, label=label, color=color, ls=ls)
+            h = ax.plot(xs[ignore_first:][::skip_indexing], y_mid[::skip_indexing], label=label, color=color, ls=ls)
             return h
         else:
             return xs, ys, min_x, max_x

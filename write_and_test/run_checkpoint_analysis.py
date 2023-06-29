@@ -768,120 +768,161 @@ if __name__ == '__main__':
         'rew': '../trained_models/checkpoint/nav_pdistal_batchaux/'
     }
     
-    # for typ in aux_types:
-    #     print('Collecting heatmap data for ' + typ)
-    #     aux_tasks = all_aux_tasks[typ]
-    #     model_folder = model_folders[typ]
-    #     checkpoint_folder = checkpoint_folders[typ]
-        
-    #     for aux in tqdm(aux_tasks):
-    #         for batch in batch_sizes:
-    #             chks = all_chks[batch]
-    #             trial_name = f'nav_pdistal_batch{batch}aux{aux}'
-    #             collect_heatmap_activations(trial_name, trials, data_folder=data_folder,
-    #                                     # checkpoint_folder=checkpoint_folder,
-    #                                     # model_folder=model_folder,
-    #                                     # checkpoints=chks)
-
-    #             # Compute and save heatmaps
-    #             chk_file_name = f'data/pdistal_batchaux_heatmap/{trial_name}_checkpoint'
-    #             hm_save_name = f'data/pdistal_batchaux_heatmap/{trial_name}_hms'
-    #             print(chk_file_name)
-    #             res = pickle.load(open(chk_file_name, 'rb'))
-                
-    #             if Path(hm_save_name).exists():
-    #                 hm_res = pickle.load(open(hm_save_name, 'rb'))
-    #             else:
-    #                 hm_res = {}
-
-    #             for traj_type in res:
-    #                 if traj_type not in hm_res: hm_res[traj_type] = {}
-    #                 for trial in res[traj_type]:
-    #                     if trial not in hm_res[traj_type]: hm_res[traj_type][trial] = {}
-    #                     for chk in tqdm(res[traj_type][trial]):
-    #                         if chk not in hm_res[traj_type][trial]: hm_res[traj_type][trial][chk] = {}
-                            
-    #                         pos = res[traj_type][trial][chk]['data']['pos']
-    #                         angle = res[traj_type][trial][chk]['data']['angle']
-    #                         for activ_type in res[traj_type][trial][chk]['activations']:
-    #                             if activ_type in hm_res[traj_type][trial][chk]: continue
-                                
-    #                             activ = res[traj_type][trial][chk]['activations'][activ_type]
-                                
-    #                             # For each layer of shared, actor, critic
-    #                             layer_hms = []
-    #                             for layer in range(activ.shape[0]):
-    #                                 hms = np.stack([gaussian_smooth(pos, activ[layer, :, node]) for node in range(activ.shape[2])])
-    #                                 layer_hms.append(hms)
-    #                             hm_res[traj_type][trial][chk][activ_type] = np.stack(layer_hms).astype('float16')
-                            
-    #                         hm_res[traj_type][trial][chk]['pos'] = pos.astype('float32')
-    #                         hm_res[traj_type][trial][chk]['angle'] = angle.astype('float32')
-
-    #                 pickle.dump(hm_res, open(hm_save_name, 'wb'))
-                    
-                    
+    # Additional runs to just get 1 new aux set
+    aux_types = ['cat']
+    all_aux_tasks = {'cat':  ['catfacequadcoef1']}
     
-    fixups = [(16, 'none'), (16, 'wall0coef1'), (32, 'wall0coef1'), (16, 'wall1coef1'),
-              (32, 'wall1coef1')]
-    collect_traj = [True, False, True, True, False]
-    
-    for i in range(len(fixups)):
-        batch = fixups[i][0]
-        aux = fixups[i][1]
-        collect = collect_traj[i]
-        if aux == 'none':
-            checkpoint_folder = checkpoint_folders['control']
-            model_folder = model_folders['control']
-        else:
-            checkpoint_folder = checkpoint_folders['num']
-            model_folder = model_folders['num']
-        chks = all_chks[batch]
+    '''Collect heatmap / activation data for all trials (skip ones where file exists)'''
+    for typ in aux_types:
+        print('Collecting heatmap data for ' + typ)
+        aux_tasks = all_aux_tasks[typ]
+        model_folder = model_folders[typ]
+        checkpoint_folder = checkpoint_folders[typ]
         
-        trial_name = f'nav_pdistal_batch{batch}aux{aux}'
-        
-        if collect:
-            print(f'collecting trajectories for {batch} {aux}')
-            collect_heatmap_activations(trial_name, trials, data_folder=data_folder,
-                                    checkpoint_folder=checkpoint_folder,
-                                    model_folder=model_folder,
-                                    checkpoints=chks)
-
-        # Compute and save heatmaps
-        chk_file_name = f'data/pdistal_batchaux_heatmap/{trial_name}_checkpoint'
-        hm_save_name = f'data/pdistal_batchaux_heatmap/{trial_name}_hms'
-        print(chk_file_name)
-        res = pickle.load(open(chk_file_name, 'rb'))
-        
-        if Path(hm_save_name).exists():
-            hm_res = pickle.load(open(hm_save_name, 'rb'))
-        else:
-            hm_res = {}
-
-        for traj_type in res:
-            if traj_type not in hm_res: hm_res[traj_type] = {}
-            for trial in res[traj_type]:
-                if trial not in hm_res[traj_type]: hm_res[traj_type][trial] = {}
-                for chk in tqdm(res[traj_type][trial]):
-                    if chk not in hm_res[traj_type][trial]: hm_res[traj_type][trial][chk] = {}
-                    
-                    pos = res[traj_type][trial][chk]['data']['pos']
-                    angle = res[traj_type][trial][chk]['data']['angle']
-                    for activ_type in res[traj_type][trial][chk]['activations']:
-                        if activ_type in hm_res[traj_type][trial][chk]: continue
-                        
-                        activ = res[traj_type][trial][chk]['activations'][activ_type]
-                        
-                        # For each layer of shared, actor, critic
-                        layer_hms = []
-                        for layer in range(activ.shape[0]):
-                            hms = np.stack([gaussian_smooth(pos, activ[layer, :, node]) for node in range(activ.shape[2])])
-                            layer_hms.append(hms)
-                        hm_res[traj_type][trial][chk][activ_type] = np.stack(layer_hms).astype('float16')
-                    
-                    hm_res[traj_type][trial][chk]['pos'] = pos.astype('float32')
-                    hm_res[traj_type][trial][chk]['angle'] = angle.astype('float32')
-
-            pickle.dump(hm_res, open(hm_save_name, 'wb'))
-
+        for aux in tqdm(aux_tasks):
+            for batch in batch_sizes:
+                chks = all_chks[batch]
+                trial_name = f'nav_pdistal_batch{batch}aux{aux}'
                 
+                # Skip collecting activations if already completed
+                
+                chk_file_name = f'data/pdistal_batchaux_heatmap/{trial_name}_checkpoint'
+                if Path(chk_file_name).exists():
+                    continue
+                
+                collect_heatmap_activations(trial_name, trials, data_folder=data_folder,
+                                        checkpoint_folder=checkpoint_folder,
+                                        model_folder=model_folder,
+                                        checkpoints=chks)
+                
+                # '''Skip all heatmap computation to just collect checkpoint data'''
+                # # Compute and save heatmaps
+                chk_file_name = f'data/pdistal_batchaux_heatmap/{trial_name}_checkpoint'
+                hm_save_name = f'data/pdistal_batchaux_heatmap/{trial_name}_hms'
+                print(chk_file_name)
+                res = pickle.load(open(chk_file_name, 'rb'))
+                
+                if Path(hm_save_name).exists():
+                    hm_res = pickle.load(open(hm_save_name, 'rb'))
+                else:
+                    hm_res = {}
+
+                for traj_type in res:
+                    if traj_type not in hm_res: hm_res[traj_type] = {}
+                    for trial in res[traj_type]:
+                        if trial not in hm_res[traj_type]: hm_res[traj_type][trial] = {}
+                        for chk in tqdm(res[traj_type][trial]):
+                            if chk not in hm_res[traj_type][trial]: hm_res[traj_type][trial][chk] = {}
+                            
+                            pos = res[traj_type][trial][chk]['data']['pos']
+                            angle = res[traj_type][trial][chk]['data']['angle']
+                            for activ_type in res[traj_type][trial][chk]['activations']:
+                                if activ_type in hm_res[traj_type][trial][chk]: continue
+                                
+                                activ = res[traj_type][trial][chk]['activations'][activ_type]
+                                
+                                # For each layer of shared, actor, critic
+                                layer_hms = []
+                                for layer in range(activ.shape[0]):
+                                    hms = np.stack([gaussian_smooth(pos, activ[layer, :, node]) for node in range(activ.shape[2])])
+                                    layer_hms.append(hms)
+                                hm_res[traj_type][trial][chk][activ_type] = np.stack(layer_hms).astype('float16')
+                            
+                            hm_res[traj_type][trial][chk]['pos'] = pos.astype('float32')
+                            hm_res[traj_type][trial][chk]['angle'] = angle.astype('float32')
+
+                    pickle.dump(hm_res, open(hm_save_name, 'wb'))
+                    
+                    
+    '''Fix individual messed up trials'''
+    # fixups = [(16, 'none'), (16, 'wall0coef1'), (32, 'wall0coef1'), (16, 'wall1coef1'),
+    #           (32, 'wall1coef1')]
+    # collect_traj = [True, False, True, True, False]
+    
+    # for i in range(len(fixups)):
+    #     batch = fixups[i][0]
+    #     aux = fixups[i][1]
+    #     collect = collect_traj[i]
+    #     if aux == 'none':
+    #         checkpoint_folder = checkpoint_folders['control']
+    #         model_folder = model_folders['control']
+    #     else:
+    #         checkpoint_folder = checkpoint_folders['num']
+    #         model_folder = model_folders['num']
+    #     chks = all_chks[batch]
+        
+    #     trial_name = f'nav_pdistal_batch{batch}aux{aux}'
+        
+    #     if collect:
+    #         print(f'collecting trajectories for {batch} {aux}')
+    #         collect_heatmap_activations(trial_name, trials, data_folder=data_folder,
+    #                                 checkpoint_folder=checkpoint_folder,
+    #                                 model_folder=model_folder,
+    #                                 checkpoints=chks)
+
+    #     # Compute and save heatmaps
+    #     chk_file_name = f'data/pdistal_batchaux_heatmap/{trial_name}_checkpoint'
+    #     hm_save_name = f'data/pdistal_batchaux_heatmap/{trial_name}_hms'
+    #     print(chk_file_name)
+    #     res = pickle.load(open(chk_file_name, 'rb'))
+        
+    #     if Path(hm_save_name).exists():
+    #         hm_res = pickle.load(open(hm_save_name, 'rb'))
+    #     else:
+    #         hm_res = {}
+
+    #     for traj_type in res:
+    #         if traj_type not in hm_res: hm_res[traj_type] = {}
+    #         for trial in res[traj_type]:
+    #             if trial not in hm_res[traj_type]: hm_res[traj_type][trial] = {}
+    #             for chk in tqdm(res[traj_type][trial]):
+    #                 if chk not in hm_res[traj_type][trial]: hm_res[traj_type][trial][chk] = {}
+                    
+    #                 pos = res[traj_type][trial][chk]['data']['pos']
+    #                 angle = res[traj_type][trial][chk]['data']['angle']
+    #                 for activ_type in res[traj_type][trial][chk]['activations']:
+    #                     if activ_type in hm_res[traj_type][trial][chk]: continue
+                        
+    #                     activ = res[traj_type][trial][chk]['activations'][activ_type]
+                        
+    #                     # For each layer of shared, actor, critic
+    #                     layer_hms = []
+    #                     for layer in range(activ.shape[0]):
+    #                         hms = np.stack([gaussian_smooth(pos, activ[layer, :, node]) for node in range(activ.shape[2])])
+    #                         layer_hms.append(hms)
+    #                     hm_res[traj_type][trial][chk][activ_type] = np.stack(layer_hms).astype('float16')
+                    
+    #                 hm_res[traj_type][trial][chk]['pos'] = pos.astype('float32')
+    #                 hm_res[traj_type][trial][chk]['angle'] = angle.astype('float32')
+
+    #         pickle.dump(hm_res, open(hm_save_name, 'wb'))
+    
+    '''Collect activation data for 4 wall trials'''
+    # trials = range(5)
+    # batch_sizes = [16, 32]
+    # all_chks = {16: [0, 50, 100, 150, 300, 600, 1000, 1500],
+    #             32: [0, 20, 40, 80, 150, 300, 600, 900]}
+        
+    # data_folder = 'data/envtype_heatmaps/'
+    
+    # env_types = ['4wall']
+    # model_folder = 'nav_envtypes/'
+    # checkpoint_folder = '../trained_models/checkpoint/nav_envtypes/'
+    
+    # '''Collect heatmap / activation data for all trials (skip ones where file exists)'''
+    # for batch in batch_sizes:
+    #     for env_type in env_types:
+    #         chks = all_chks[batch]
+    #         trial_name = f'nav_{env_type}_batch{batch}'
+            
+    #         # Skip collecting activations if already completed
+            
+    #         chk_file_name = f'{data_folder}{trial_name}_checkpoint'
+    #         if Path(chk_file_name).exists():
+    #             continue
+            
+    #         collect_heatmap_activations(trial_name, trials, data_folder=data_folder,
+    #                                 checkpoint_folder=checkpoint_folder,
+    #                                 model_folder=model_folder,
+    #                                 checkpoints=chks)
+

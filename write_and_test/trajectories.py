@@ -118,7 +118,7 @@ def classify_res(res, batch=True):
 
 
 
-def classify_folder(path):
+def classify_folder(path, learner):
     '''Use learner to perform batch classification on a directory of images
     E.g. folder = Path('data/trajectories/test_imgs/batch16_auxnone_trial0_chk900')
     '''
@@ -135,6 +135,7 @@ def classify_folder(path):
         'idxs': idxs,
         'probs': probs
     }
+
 
     
     

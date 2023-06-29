@@ -201,7 +201,7 @@ def dist(v):
 
 class Character:
     def __init__(self, pos=[WINDOW_SIZE[0]/2, WINDOW_SIZE[1]/2], angle=0, color=4, size=10,
-                fov=120*DEG_TO_RAD, num_rays=30, render_rays=True):
+                fov=120*DEG_TO_RAD, num_rays=30, render_rays=True, one_hot_obs=False):
         '''
         Generate a character that can move through the window
         pos: starting position
@@ -219,7 +219,7 @@ class Character:
         self.fov = fov
         self.render_rays = render_rays
         self.num_rays = num_rays
-        
+        self.one_hot_obs = one_hot_obs        
         self.ray_max_len = np.linalg.norm(WINDOW_SIZE)+100
 
         
@@ -302,6 +302,7 @@ class Character:
         # Get distances, colors and a plottable        
         self.ray_dists = dists[wall_idxs2[0], wall_idxs2[1]]
         self.ray_colors = list(map(lambda x: x.color, self.vis_wall_refs[wall_idxs]))
+        # !! Need to change this to make rays end on collision for rendering purposes
         self.ray_plot = np.stack([ray_ends, 
                               np.array(list(self.pos)*len(ray_ends)).reshape(-1, 2)], 
                               axis=1).reshape(-1, 2)
@@ -322,10 +323,13 @@ class Character:
         poly = plt.Polygon([point1, point2, point3], fc=draw_color)
         if ax == None:
             plt.gca().add_patch(poly)
-            plt.gca().plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
+            
+            if self.render_rays:
+                plt.gca().plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
         else:
             ax.add_patch(poly)
-            ax.plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
+            if self.render_rays:            
+                ax.plot(self.ray_plot.T[0], self.ray_plot.T[1], c='w', linewidth=1)
 
        
         
@@ -411,7 +415,13 @@ class Character:
         Get all rays and their distances to objects
         normalize_depth: divide depth readings by value 
         '''
-        ray_colors = np.array(self.ray_colors) / 6
+        
+        if self.one_hot_obs:
+            ray_colors = np.zeros((self.num_rays, 6))
+            ray_colors[np.arange(self.num_rays), self.ray_colors] = 1
+            ray_colors = ray_colors.reshape(-1)
+        else:
+            ray_colors = np.array(self.ray_colors) / 6
         ray_dists = np.array(self.ray_dists) / max_depth
         
         visual = np.append(ray_colors, ray_dists)
@@ -551,7 +561,9 @@ class NavEnvFlat(gym.Env):
                 auxiliary_task_args=[], fixed_reset=[None, None],
                 character_reset_pos=0, turn_speed=0.2, move_speed=10,
                 num_actions=4, num_grid_slices=5, goal_size=20, goal_corner=None,
-                separate_aux_tasks=False, poster_thickness=None):
+                separate_aux_tasks=False, poster_thickness=None,
+                render_character=True, wall_thickness=None,
+                one_hot_obs=False):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
@@ -603,7 +615,10 @@ class NavEnvFlat(gym.Env):
             a list of auxiliary outputs (e.g. PPOAux, RolloutStorageAux etc.)
         poster_thickness: if given a value, set poster thickness to that value. Implemented
             to draw plots where the poster is clearer
-        
+        render_character: whether to render the character when rending the environment
+        wall_thickness: if given a value, set wall thickness to that value
+        one_hot_obs: wheter to set colors to be a one-hot encoded vector
+            If False, colors are evenly spaced float values between 0 and 1, spaced by 7 possible values
         '''
         super(NavEnvFlat, self).__init__()
 
@@ -654,11 +669,17 @@ class NavEnvFlat(gym.Env):
         self.target_grid = 0
         self.last_reward = 0
         self.poster_thickness = poster_thickness
+        self.wall_thickness = wall_thickness
         
         observation_width = num_rays
         self.ray_obs_width = num_rays
+        self.one_hot_obs = one_hot_obs
+        
+        if self.one_hot_obs:
+            observation_width = num_rays * 6
+        
         if give_dist:
-            observation_width = observation_width * 2
+            observation_width += num_rays
             self.ray_obs_width = observation_width
         if give_heading:
             observation_width += 1
@@ -668,6 +689,8 @@ class NavEnvFlat(gym.Env):
         #agent needs to be told when platform is actually reached
         if task_structure == 3:
             observation_width += 1
+            
+        # task structure 4 tells the agent on which grid the goal is
         if task_structure == 4:
             num_grid = self.num_grid_slices ** 2
             observation_width += num_grid + 1
@@ -676,15 +699,16 @@ class NavEnvFlat(gym.Env):
         if task_structure == 5:
             self.num_actions = self.num_actions + 1
 
-        self.observation_space = spaces.Box(low=0, high=6, shape=(observation_width,))
+        self.observation_space = spaces.Box(low=0, high=1, shape=(observation_width,))
         self.action_space = spaces.Discrete(self.num_actions) #turn left, forward, right as actions
         
         self.max_steps = max_steps
         self.current_steps = 0
         
-        self.character = Character(num_rays=self.num_rays, fov=self.fov)
+        self.character = Character(num_rays=self.num_rays, fov=self.fov, one_hot_obs=one_hot_obs)
         self.initial_character_position = self.character.pos.copy()
         self.num_objects = num_objects
+        self.render_character = render_character
         
         self.fig = None
         
@@ -872,7 +896,9 @@ class NavEnvFlat(gym.Env):
             plt.xlim([0, WINDOW_SIZE[0]])
             plt.ylim([0, WINDOW_SIZE[1]])
 
-        self.character.draw(ax=ax)
+        if self.render_character:
+            self.character.draw(ax=ax)
+        
         for box in self.boxes:
             box.draw(ax=ax)
         if self.task_structure == 4:
@@ -1063,7 +1089,10 @@ class NavEnvFlat(gym.Env):
         
 
     def generate_world(self):
-        wall_thickness = 1
+        if self.wall_thickness == None:
+            wall_thickness = 1
+        else:
+            wall_thickness = self.wall_thickness
         
         if type(self.goal_size) == int:
             goal_size = [self.goal_size, self.goal_size]
