@@ -1196,10 +1196,9 @@ class NavEnvFlat(gym.Env):
             goal_size = [20, 20]
         wall_thickness = 1
         
-        
-        pos = self.fixed_reset[0].copy()
+        pos = self.fixed_reset[0]
         angle = self.fixed_reset[1]
-        if type(pos) == type(None):
+        if pos is None:
             while searching:
                 # Old position randomizer - too much space away from goal
                 if self.character_reset_pos == 0:
@@ -1210,7 +1209,9 @@ class NavEnvFlat(gym.Env):
                     pos = np.random.uniform(low=wall_thickness+3, high=300-wall_thickness-3, size=(2,))
                     if dist(goal_center - pos) > max(goal_size)*1.5:
                         searching = False
-        
+        else:
+            pos = pos.copy()
+            
         if angle == None:
             angle = np.random.uniform(0, 2*np.pi)
 
