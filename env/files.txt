@@ -1,0 +1,3 @@
+c:\users\14and\anaconda3\envs\sqlinject\lib\site-packages\gym_nav-0.0.1-py3.9.egg
+C:\Users\14and\anaconda3\envs\sqlinject\Scripts\f2py-script.py
+C:\Users\14and\anaconda3\envs\sqlinject\Scripts\f2py.exe

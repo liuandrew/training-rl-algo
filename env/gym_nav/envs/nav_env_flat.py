@@ -563,11 +563,12 @@ class NavEnvFlat(gym.Env):
                 num_actions=4, num_grid_slices=5, goal_size=20, goal_corner=None,
                 separate_aux_tasks=False, poster_thickness=None,
                 render_character=True, wall_thickness=None,
-                one_hot_obs=False):
+                one_hot_obs=False, goal_reward=1.):
         '''
         rew_structure: 'dist' - reward given based on distance to goal
                         'goal' - reward only given when goal reached
                         'explore' - additional reward given for each section explored
+                        'explorepunish' - negative reward given when spending time near previous spots
         give_heading: whether to additionally give a distance and direction to goal
         flat: whether to give observations in a flattened state
         world_gen_func: a function can be passed to manually create a world
@@ -643,6 +644,7 @@ class NavEnvFlat(gym.Env):
         self.collission_penalty = collission_penalty
         self.default_reward = default_reward
         self.sub_goal_reward = sub_goal_reward
+        self.goal_reward = goal_reward
         self.rew_structure = rew_structure
         self.task_structure = task_structure
         self.verbose = verbose
@@ -762,13 +764,13 @@ class NavEnvFlat(gym.Env):
             #Perform action to state that agent is on the platform
             on_goal = self.test_platform()
             if on_goal:
-                reward = float(1)
+                reward = float(self.goal_reward)
                 done = True
 
         if self.rew_structure == 'dist':
             goal = self.boxes[-1]
             dist_to_goal = self.sub_goal_reward * \
-                (self.max_goal_dist - dist(goal.center - self.character.pos)) / self.max_goal_dist
+                (self.max_goal_dist - np.linalg.norm(goal.center - self.character.pos)) / self.max_goal_dist
                 # Previously use max distance possible of entire pool, 
                 # now use max distance from goal possible
                 # (MAX_LEN-dist(goal.center - self.character.pos)) / MAX_LEN
@@ -797,6 +799,25 @@ class NavEnvFlat(gym.Env):
                 info['bonus_reward'] = self.sub_goal_reward
             else:
                 info['bonus_reward'] = 0
+        elif self.rew_structure == 'explorepunish':
+            pos = self.character.pos
+            self.visited_positions[self.visited_idx] = pos.copy()
+            self.visited_idx += 1
+
+            lim_idx = int(np.clip(self.visited_idx-10, 0, np.inf))
+            
+            if lim_idx > 0:
+                dists = self.visited_positions[:lim_idx] - pos
+                dist = np.min(np.sum(dists**2, axis=1))
+                dist = np.sqrt(dist)
+                
+                # This pretty much goes to 0 around dist of 50, which is tuned
+                #  to a move speed of 10
+                punish = -np.exp(-dist/10) * self.sub_goal_reward
+                reward += punish
+                info['bonus_reward'] = punish
+            
+            
             
             
 
@@ -833,7 +854,7 @@ class NavEnvFlat(gym.Env):
             y_low = y_grid * WINDOW_SIZE[1] / self.num_grid_slices
             y_high = (y_grid + 1) * WINDOW_SIZE[1] / self.num_grid_slices
             if x_low <= pos[0] <= x_high and y_low <= pos[1] <= y_high:
-                reward = float(1)
+                reward = float(self.goal_reward)
             
         self.last_reward = reward
         observation = self.get_observation()
@@ -841,6 +862,10 @@ class NavEnvFlat(gym.Env):
         if self.task_structure == 3 and collision_obj != None and \
             collision_obj.is_goal:
             observation[self.ray_obs_width] = 1
+            
+            if self.rew_structure == 'explorepunish':
+                self.visited_positions = np.full((self.max_steps + 50, 2), np.inf)
+                self.visited_idx = 0
         auxiliary_output = self.get_auxiliary_output()
         info['auxiliary'] = auxiliary_output
         
@@ -885,7 +910,9 @@ class NavEnvFlat(gym.Env):
         self.total_rewards = 0
         
         self.visited_sections = np.zeros((self.num_grid_slices, self.num_grid_slices,))
-        
+        self.visited_positions = np.full((self.max_steps + 50, 2), np.inf)
+        self.visited_idx = 0
+
         return observation
 
     
